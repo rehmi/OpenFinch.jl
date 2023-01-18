@@ -1,0 +1,13 @@
+name = "OpenFinch"
+uuid = "5578f54f-b1a7-49dc-810c-a3efdaa69b44"
+authors = ["Rehmi Post"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
