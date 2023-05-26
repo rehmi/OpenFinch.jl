@@ -1,0 +1,5 @@
+[deps]
+rpyc = ""
+
+[pip.deps]
+v4l2py = ""
