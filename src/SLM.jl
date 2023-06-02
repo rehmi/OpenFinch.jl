@@ -1,6 +1,7 @@
 module SLM
 
 using PythonCall
+using ..RPYC
 
 # const rpyc = Ref{Py}()
 # const plumbum = Ref{Py}()
@@ -13,29 +14,11 @@ function __init__()
     # zerodeploy[] = pyimport("rpyc.utils.zerodeploy")
 end
 
-get_monitors(rpy) = rpy.modules.screeninfo.get_monitors()
-
 struct SLMDisplay
-	host
-	mach
-	server
 	rpy
-	version
-	pid
 	
-	function RemotePython(host::AbstractString, user::AbstractString="")
-		host = host
-		mach = plumbum[].SshMachine(host=host, user=user)
-		server = zerodeploy[].DeployedServer(mach)
-		rpy = server.classic_connect()
-		version = replace(pyconvert(String, rpy.modules.sys.version), "\n"=>"")
-		pid = pyconvert(Int, rpy.modules.os.getpid())
-
-		self = new(host, mach, server, rpy, version, pid)
-
-		@info "connected to Python $(self.version), pid $(self.pid)"
-		
-		return self
+	function SLMDisplay(host::AbstractString, user::AbstractString="")
+		new(RPYC.RemotePython(host, user))
 	end
 end
 
@@ -44,19 +27,65 @@ using PythonCall
 
 using ..RPYC
 
-function setDISPLAY(rpy::RemotePython, ds=":0")
+function setDISPLAY(disp::SLMDisplay, ds=":0")
 	try
-		rpy.modules.os.environ["DISPLAY"]
+		disp.rpy.modules.os.environ["DISPLAY"]
 	catch
-		rpy.modules.os.environ["DISPLAY"] = ":0"
+		disp.rpy.modules.os.environ["DISPLAY"] = ":0"
 	end
 end
 
-function screeninfo(rpy::RemotePython)
-	# if rpy.modules.os.environment
+get_monitors(disp::SLMDisplay) = disp.rpy.modules.screeninfo.get_monitors()
+
+function testdisplay(disp::SLMDisplay)
+    np = disp.rpy.modules.numpy
+    cv2 = disp.rpy.modules.cv2
+	screen = get_monitors(disp)[1]
+    width = screen.width
+	height = screen.height
+
+	is_color = true
+
+	# if is_color
+	# 	image = np.ones((height, width, 3), dtype=np.uint8)
+	# 	image[1:10, 1:10] .= 0 # black at top-left corner
+	# 	image[height - 10:end, 1:10] .= [1, 0, 0] # blue at bottom-left
+	# 	image[1:10, width - 10:end] .= [0, 1, 0] # green at top-right
+	# 	image[height - 10:, width - 10:] = [0, 0, 1] # red at bottom-right
+	# 	image = image*255
+	# else
+	# 	image = np.ones((height, width), dtype=np.float32)
+	# 	image[0, 0] = 0 # top-left corner
+	# 	image[height - 2, 0] = 0 # bottom-left
+	# 	image[0, width - 2] = 0 # top-right
+	# 	image[height - 2, width - 2] = 0 # bottom-right
+	# end
+
+	# window_name = 'projector'
+	# cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+	# cv2.moveWindow(window_name, screen.x - 1, screen.y - 1)
+	# cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN,
+	# cv2.WINDOW_FULLSCREEN)
+	# cv2.imshow(window_name, image)
+	# cv2.waitKey()
+	# cv2.destroyAllWindows()
 end
 
+##
 
+# r.execute("""
+# import subprocess
+# import sys
+
+# def install(package):
+# 	subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+# """)
+
+# r.execute("install('screeninfo')")
+# r.execute("install('numpy')")
+# r.execute("install('opencv-python')")
+
+##
 
 # from screeninfo import get_monitors
 # import numpy as np

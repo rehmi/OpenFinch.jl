@@ -45,7 +45,10 @@ function __init__()
     zerodeploy[] = pyimport("rpyc.utils.zerodeploy")
 end
 
-struct RemotePython
+abstract type RemotePython end
+
+RemotePython(host::AbstractString, user::AbstractString="") = RPYCClassic(host, user)
+struct RPYCClassic <: RemotePython
 	host
 	mach
 	server
@@ -53,7 +56,7 @@ struct RemotePython
 	version
 	pid
 	
-	function RemotePython(host::AbstractString, user::AbstractString="")
+	function RPYCClassic(host::AbstractString, user::AbstractString="")
 		host = host
 		mach = plumbum[].SshMachine(host=host, user=user)
 		server = zerodeploy[].DeployedServer(mach)
@@ -69,11 +72,11 @@ struct RemotePython
 	end
 end
 
-function Base.show(io::IO, r::RemotePython)
-	print(io, "RemotePython(host=$(r.host), pid=$(r.pid), version=$(r.version))")
+function Base.show(io::IO, r::RPYCClassic)
+	print(io, "RPYCClassic(host=$(r.host), pid=$(r.pid), version=$(r.version))")
 end
 
-function Base.getproperty(remote::RemotePython, k::Symbol)
+function Base.getproperty(remote::RPYCClassic, k::Symbol)
 	if k ∈ propertynames(remote)
 		getfield(remote, k)
 	else
@@ -81,6 +84,6 @@ function Base.getproperty(remote::RemotePython, k::Symbol)
 	end
 end
 
-export RemotePython
+export RPYCClassic, RemotePython
 
 end
