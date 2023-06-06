@@ -7,19 +7,18 @@ using JSServe: @js_str, onjs, App, Slider
 using JSServe: @js_str, Session, App, onjs, onload, Button
 using JSServe: TextField, Slider, linkjs
 
+import JSServe.TailwindDashboard as D
+
 using WGLMakie, GeometryBasics, FileIO
 using WGLMakie: volume
 
 using Observables, Markdown
 
-##
 
 # set_theme!(resolution=(1200, 800))
 
-hbox(args...) = DOM.div(args...)
-vbox(args...) = DOM.div(args...)
-
-##
+# hbox(args...) = DOM.div(args...)
+# vbox(args...) = DOM.div(args...)
 
 JSServe.browser_display()
 
@@ -36,26 +35,30 @@ BufferType 	= v4l2py.device.BufferType
 dev = Device.from_id(1)
 dev.open()
 vc = VideoCapture(dev)
+vc.set_format(1600, 1200, "YUYV")
 vc.open()
 
 ##
 
-function canned_dev_settings(dev)
+function default_dev_settings(dev)
 	# dev.open()
-	dev.controls["exposure_auto_priority"].value = 0
-	dev.controls["exposure_auto"] = 0
-	dev.controls["exposure_absolute"] = 1
-	dev.controls["gain"] = 50
-	dev.controls["gamma"] = 100
-	dev.controls["sharpness"] = 3
-	dev.controls["backlight_compensation"] = 0
-	dev.controls["brightness"] = 0
-	dev.controls["contrast"] = 32
-	dev.controls["power_line_frequency"] = 0
+	defaults = Dict(
+		"brightness"					=> 0,
+		"contrast"						=> 32,
+		"saturation"					=> 64,
+		"hue"							=> 1,
+		"gamma"							=> 72,
+		"gain"							=> 54,
+		"power_line_frequency"			=> 2,
+		"sharpness"						=> 3,
+		"backlight_compensation"		=> 0,
+		"exposure_auto"					=> 1,
+		"exposure_absolute"				=> 1,
+		"exposure_auto_priority"		=> 0,
+		# "white_balance_temperature" 	=> 4600
+	)
 	# dev.close()
 end
-
-##
 
 function capture_frame(dev)
 	# dev.open()
@@ -70,136 +73,84 @@ function capture_frame(dev)
 	rotl90(Gray.(a[1,:,:]/255))
 end
 
-# capture_frame(dev)
 
-##
+function make_slider(T::Type{Integer}; max=0, min=0, step=0, default=0, value=0, kw...)
+	Slider(min:step:max, value=value)
+end
 
-# cap = cv2.VideoCapture(1)
-# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
-# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
-# cap.set(cv2.CAP_PROP_FOURCC, reinterpret(UInt32, b"YUYV")[1])
-# cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
+function make_checkbox(;value=0, default=0)
+	JSServe.Checkbox(value!=0)
+end
 
-##
-
-# ret, fcap = cap.read(); img = pyconvert(Array, fcap); Gray.(img[end:-1:1,:,1]/255)
-
-##
-
-# bytes = pyconvert(Array{UInt8}, frame.array)
-# words = reinterpret(UInt16, bytes)
-
-# a = reshape(words, (1600, 1200))
-
-##
-
-# cam = Device.from_id(1)
-
-# cam.open()
-
-# cam.info.card
-
-# cam.info.capabilities
-
-# cam.info.formats
-
-# cam.get_format(BufferType.VIDEO_CAPTURE)
-
-# ctrls = collect(cam.controls.values())
-
-# cam.close()
-
-##
-
-# pywith(Device.from_id(1)) do cam
-#     for (i, frame) in @py enumerate(cam)
-#         println("frame #$i: $(len(frame)) bytes")
-#         if i > 9
-#             break
-# 		end
-# 	end
-# end
-
-##
-
-# capture = VideoCapture(device)
-
-# capture.set_format(1600, 1200, "YUYV 4:2:2")
-
-##
+img = Observable(rotr90(Gray.(rand(1600,1200))))
 
 app = App() do
     capture_button = Button("capture frame")
 
-	img = Observable(rotr90(Gray.(rand(1600,1200))))
+    brightness = make_slider(Integer, min=-64, max=64, step=1, default=0, value=0)
+    contrast = make_slider(Integer, min=0, max=64, step=1, default=32, value=32)
+    saturation = make_slider(Integer, min=0, max=128, step=1, default=64, value=64)
+    hue = make_slider(Integer, min=-40, max=40, step=1, default=0, value=0)
+    gamma = make_slider(Integer, min=72, max=500, step=1, default=100, value=72)
+    gain = make_slider(Integer, min=0, max=100, step=1, default=0, value=54)
+    sharpness = make_slider(Integer, min=0, max=6, step=1, default=3, value=3)
+    exposure_absolute = make_slider(Integer, min=1, max=5000, step=1, default=157, value=1)
+
+	# white_balance_temperature = make_slider(Integer, min=2800, max=6500, step=1, default=4600, value=4600, flags=inactive)
+    # backlight_compensation = make_slider(Integer, min=0, max=2, step=1, default=1, value=0)
+
+	white_balance_temperature_auto = make_checkbox(default=1, value=1)
+	exposure_auto_priority = make_checkbox(default=0, value=0)
+
+	exposure_auto = make_slider(Integer, min=0, max=3, step=1, default=3, value=1)
+    power_line_frequency = make_slider(Integer, min=0, max=2, step=1, default=2, value=2)
 
     map(capture_button) do click
-        # img[] = rotr90(capture_frame(dev))
-		img[] = rand(Gray, 1600, 1200)
+        img[] = rotr90(capture_frame(dev))
+		# img[] = rand(Gray, 1600, 1200)
     end
 
-    dom = md"""
-    # Plots:
+    map(brightness) do val; dev.controls["brightness"].value = val; end
+	map(contrast) do val; dev.controls["contrast"].value = val; end
+	map(saturation) do val; dev.controls["saturation"].value = val; end
+	map(gamma) do val; dev.controls["gamma"].value = val; end
+	map(gain) do val; dev.controls["gain"].value = val; end
+	map(exposure_absolute) do val; dev.controls["exposure_absolute"].value = val; end
+	map(sharpness) do val; dev.controls["sharpness"].value = val; end
 
-    $(capture_button)
+	map(exposure_auto) do val; dev.controls["exposure_auto"].value = val; end
+	map(power_line_frequency) do val; dev.controls["power_line_frequency"].value = val; end
 
-    ---
+	map(white_balance_temperature_auto) do val; dev.controls["white_balance_temperature_auto"].value = val ? 1 : 0; end
+	map(exposure_auto_priority) do val; dev.controls["exposure_auto_priority"].value = val ? 1 : 0; end
 
-    $(image(img))
-
-    ---
-    """
+    ctrls = md"""
+| Name | Value | Control |
+|:---- |:-------:| -----:|
+| sharpness | $(sharpness.value) | $(sharpness)|
+| power line frequency | $(power_line_frequency.value) | $(power_line_frequency)|
+| brightness | $(brightness.value) | $(brightness)|
+| contrast | $(contrast.value) | $(contrast)|
+| saturation | $(saturation.value) | $(saturation)|
+| gamma | $(gamma.value) | $(gamma)|
+| gain | $(gain.value) | $(gain)|
+| exposure auto priority | $(exposure_auto_priority.value) | $(exposure_auto_priority)|
+| exposure absolute | $(exposure_absolute.value) | $(exposure_absolute)|
+| exposure auto | $(exposure_auto.value) | $(exposure_auto)|
+"""
+	plt = md"""
+$(capture_button)
+$(image(img))
+"""
+	dom = D.FlexRow(
+		D.Card(ctrls, width="30%"),
+		D.Card(plt, width="70%")
+	)
     return JSServe.DOM.div(JSServe.MarkdownCSS, JSServe.Styling, dom)
 end
 
 display(app)
 
-##
-
-# async def loop(variable):
-#     while True:
-#         await asyncio.sleep(0.1)
-#         variable[0] += 1
-
-
-# async def main():
-#     fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
-#     logging.basicConfig(level="INFO", format=fmt)
-
-#     data = [0]
-#     asyncio.create_task(loop(data))
-
-#     with Device.from_id(0) as device:
-#         capture = VideoCapture(device)
-#         capture.set_format(640, 480, "MJPG")
-#         with capture as stream:
-#             start = last = time.monotonic()
-#             last_update = 0
-#             async for frame in stream:
-#                 new = time.monotonic()
-#                 fps, last = 1 / (new - last), new
-#                 if new - last_update > 0.1:
-#                     elapsed = new - start
-#                     print(
-#                         f"frame {frame.frame_nb:04d} {len(frame)/1000:.1f} Kb at {fps:.1f} fps ; "
-#                         f" data={data[0]}; {elapsed=:.2f} s;",
-#                         end="\r",
-#                     )
-#                     last_update = new
-
-
-# try:
-#     asyncio.run(main())
-# except KeyboardInterrupt:
-#     logging.info("Ctrl-C pressed. Bailing out")
-
-
-##
-nothing
-##
-
-
-##
 
 ##
 nothing
@@ -426,3 +377,134 @@ if false
 	##
 
 end # if false
+
+
+
+# julia> dev,info
+# driver = uvcvideo
+# card = Arducam OV2311 USB Camera: Ardu
+# bus = usb-0000:01:00.0-1.3
+# version = 5.15.84
+# capabilities = DEVICE_CAPS|EXT_PIX_FORMAT|META_CAPTURE|STREAMING|VIDEO_CAPTURE
+# device_capabilities = EXT_PIX_FORMAT|STREAMING|VIDEO_CAPTURE
+# buffers = VIDEO_CAPTURE
+#
+# julia> collect(dev.controls.values())
+# 14-element Vector{Py}:
+#  <Control brightness type=integer min=-64 max=64 step=1 default=0 value=0>
+#  <Control contrast type=integer min=0 max=64 step=1 default=32 value=32>
+#  <Control saturation type=integer min=0 max=128 step=1 default=64 value=64>
+#  <Control hue type=integer min=-40 max=40 step=1 default=0 value=0>
+#  <Control white_balance_temperature_auto type=boolean default=1 value=1>
+#  <Control gamma type=integer min=72 max=500 step=1 default=100 value=72>
+#  <Control gain type=integer min=0 max=100 step=1 default=0 value=54>
+#  <Control power_line_frequency type=menu min=0 max=2 step=1 default=2 value=2>
+#  <Control white_balance_temperature type=integer min=2800 max=6500 step=1 default=4600 value=4600 flags=inactive>
+#  <Control sharpness type=integer min=0 max=6 step=1 default=3 value=3>
+#  <Control backlight_compensation type=integer min=0 max=2 step=1 default=1 value=0>
+#  <Control exposure_auto type=menu min=0 max=3 step=1 default=3 value=1>
+#  <Control exposure_absolute type=integer min=1 max=5000 step=1 default=157 value=1>
+#  <Control exposure_auto_priority type=boolean default=0 value=0>
+
+# capture_frame(dev)
+
+##
+
+# cap = cv2.VideoCapture(1)
+# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
+# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
+# cap.set(cv2.CAP_PROP_FOURCC, reinterpret(UInt32, b"YUYV")[1])
+# cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
+
+##
+
+# ret, fcap = cap.read(); img = pyconvert(Array, fcap); Gray.(img[end:-1:1,:,1]/255)
+
+##
+
+# bytes = pyconvert(Array{UInt8}, frame.array)
+# words = reinterpret(UInt16, bytes)
+
+# a = reshape(words, (1600, 1200))
+
+##
+
+# cam = Device.from_id(1)
+
+# cam.open()
+
+# cam.info.card
+
+# cam.info.capabilities
+
+# cam.info.formats
+
+# cam.get_format(BufferType.VIDEO_CAPTURE)
+
+# ctrls = collect(cam.controls.values())
+
+# cam.close()
+
+##
+
+# pywith(Device.from_id(1)) do cam
+#     for (i, frame) in @py enumerate(cam)
+#         println("frame #$i: $(len(frame)) bytes")
+#         if i > 9
+#             break
+# 		end
+# 	end
+# end
+
+##
+
+# capture = VideoCapture(device)
+
+# capture.set_format(1600, 1200, "YUYV 4:2:2")
+
+##
+
+
+##
+
+# async def loop(variable):
+#     while True:
+#         await asyncio.sleep(0.1)
+#         variable[0] += 1
+
+
+# async def main():
+#     fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
+#     logging.basicConfig(level="INFO", format=fmt)
+
+#     data = [0]
+#     asyncio.create_task(loop(data))
+
+#     with Device.from_id(0) as device:
+#         capture = VideoCapture(device)
+#         capture.set_format(640, 480, "MJPG")
+#         with capture as stream:
+#             start = last = time.monotonic()
+#             last_update = 0
+#             async for frame in stream:
+#                 new = time.monotonic()
+#                 fps, last = 1 / (new - last), new
+#                 if new - last_update > 0.1:
+#                     elapsed = new - start
+#                     print(
+#                         f"frame {frame.frame_nb:04d} {len(frame)/1000:.1f} Kb at {fps:.1f} fps ; "
+#                         f" data={data[0]}; {elapsed=:.2f} s;",
+#                         end="\r",
+#                     )
+#                     last_update = new
+
+
+# try:
+#     asyncio.run(main())
+# except KeyboardInterrupt:
+#     logging.info("Ctrl-C pressed. Bailing out")
+
+
+##
+nothing
+##
