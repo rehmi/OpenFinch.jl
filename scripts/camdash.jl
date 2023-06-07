@@ -1,11 +1,11 @@
 using OpenFinch
 using PythonCall
 using Images, ImageShow, Colors
+using ImageMagick
 
 using JSServe, JSServe.DOM
-using JSServe: @js_str, onjs, App, Slider
-using JSServe: @js_str, Session, App, onjs, onload, Button
-using JSServe: TextField, Slider, linkjs
+using JSServe: @js_str, onjs, onload, linkjs
+using JSServe: App, Button, Checkbox, Dropdown, Session, Slider, TextField
 
 import JSServe.TailwindDashboard as D
 
@@ -14,15 +14,14 @@ using WGLMakie: volume
 
 using Observables, Markdown
 
-
 # set_theme!(resolution=(1200, 800))
 
 # hbox(args...) = DOM.div(args...)
 # vbox(args...) = DOM.div(args...)
 
-JSServe.browser_display()
-
 ##
+
+JSServe.browser_display()
 
 rpi = RemotePython("finch.local")
 
@@ -31,48 +30,34 @@ v4l2py 		= rpi.modules.v4l2py
 Device 		= v4l2py.Device
 VideoCapture= v4l2py.device.VideoCapture
 BufferType 	= v4l2py.device.BufferType
+PixelFormat	= v4l2py.PixelFormat
 
-dev = Device.from_id(1)
+dev = Device.from_id(0)
 dev.open()
 vc = VideoCapture(dev)
-vc.set_format(1600, 1200, "YUYV")
+# vc.set_format(1600, 1200, "YUYV")
+vc.set_format(1600, 1200, "MJPG")
 vc.open()
 
 ##
 
-function default_dev_settings(dev)
-	# dev.open()
-	defaults = Dict(
-		"brightness"					=> 0,
-		"contrast"						=> 32,
-		"saturation"					=> 64,
-		"hue"							=> 1,
-		"gamma"							=> 72,
-		"gain"							=> 54,
-		"power_line_frequency"			=> 2,
-		"sharpness"						=> 3,
-		"backlight_compensation"		=> 0,
-		"exposure_auto"					=> 1,
-		"exposure_absolute"				=> 1,
-		"exposure_auto_priority"		=> 0,
-		# "white_balance_temperature" 	=> 4600
-	)
-	# dev.close()
-end
-
-function capture_frame(dev)
-	# dev.open()
-	# vc = VideoCapture(dev)
-	# vc.set_format(1600, 1200, "YUYV")
-	# vc.open()
+function capture_raw(vc)
 	it = @py iter(vc)
 	frame = @py next(it)
-	a = reshape(pyconvert(Array, frame.array), (2,1600,1200))
-	# vc.close()
-	# dev.close()
-	rotl90(Gray.(a[1,:,:]/255))
+	return pyconvert(Array, frame.array)
 end
 
+function capture_frame(vc)
+	fmt = vc.get_format()
+	if pyconvert(Bool, fmt.pixel_format == PixelFormat.MJPEG)
+		img = reverse(capture_raw(vc) |> IOBuffer |> ImageMagick.load, dims=(1,))
+	else
+		a = reshape(capture_raw(vc), (2,1600,1200))
+		rotl90(Gray.(a[1,:,:]/255))
+	end
+end
+
+##
 
 function make_slider(T::Type{Integer}; max=0, min=0, step=0, default=0, value=0, kw...)
 	Slider(min:step:max, value=value)
@@ -84,46 +69,92 @@ end
 
 img = Observable(rotr90(Gray.(rand(1600,1200))))
 
+capture_button = Button("capture frame")
+continuous_capture = make_checkbox()
+
+# boop = async_latest(capture_button)
+map(capture_button) do click
+    # img[] = rand(Gray, 1600, 1200)
+    img[] = rotr90(capture_frame(vc))
+	@async begin
+		yield()
+		if continuous_capture[]
+			capture_button[] = true
+		end
+	end
+end
+
+OV2311_defaults = Dict(
+	"brightness"					=> 0,
+	"contrast"						=> 32,
+	"saturation"					=> 64,
+	"hue"							=> 1,
+	"gamma"							=> 72,
+	"gain"							=> 54,
+	"power_line_frequency"			=> 2,
+	"sharpness"						=> 3,
+	"backlight_compensation"		=> 0,
+	"exposure_auto"					=> 1,
+	"exposure_absolute"				=> 1,
+	"exposure_auto_priority"		=> 0,
+	# "white_balance_temperature" 	=> 4600
+)
+
+brightness = make_slider(Integer, min=-64, max=64, step=1, default=0, value=0)
+contrast = make_slider(Integer, min=0, max=64, step=1, default=32, value=32)
+saturation = make_slider(Integer, min=0, max=128, step=1, default=64, value=64)
+hue = make_slider(Integer, min=-40, max=40, step=1, default=0, value=0)
+gamma = make_slider(Integer, min=72, max=500, step=1, default=100, value=72)
+gain = make_slider(Integer, min=0, max=100, step=1, default=0, value=54)
+sharpness = make_slider(Integer, min=0, max=6, step=1, default=3, value=3)
+exposure_absolute = make_slider(Integer, min=1, max=5000, step=1, default=157, value=1)
+
+# white_balance_temperature = make_slider(Integer, min=2800, max=6500, step=1, default=4600, value=4600, flags=inactive)
+# backlight_compensation = make_slider(Integer, min=0, max=2, step=1, default=1, value=0)
+
+white_balance_temperature_auto = make_checkbox(default=1, value=1)
+exposure_auto_priority = make_checkbox(default=0, value=0)
+
+exposure_auto = make_slider(Integer, min=0, max=3, step=1, default=3, value=1)
+power_line_frequency = make_slider(Integer, min=0, max=2, step=1, default=2, value=2)
+
+map(brightness) do val
+    dev.controls["brightness"].value = val
+end
+map(contrast) do val
+    dev.controls["contrast"].value = val
+end
+map(saturation) do val
+    dev.controls["saturation"].value = val
+end
+map(gamma) do val
+    dev.controls["gamma"].value = val
+end
+map(gain) do val
+    dev.controls["gain"].value = val
+end
+map(exposure_absolute) do val
+    dev.controls["exposure_absolute"].value = val
+end
+map(sharpness) do val
+    dev.controls["sharpness"].value = val
+end
+
+map(exposure_auto) do val
+    dev.controls["exposure_auto"].value = val
+end
+map(power_line_frequency) do val
+    dev.controls["power_line_frequency"].value = val
+end
+
+map(white_balance_temperature_auto) do val
+    dev.controls["white_balance_temperature_auto"].value = val ? 1 : 0
+end
+map(exposure_auto_priority) do val
+    dev.controls["exposure_auto_priority"].value = val ? 1 : 0
+end
+
 app = App() do
-    capture_button = Button("capture frame")
-
-    brightness = make_slider(Integer, min=-64, max=64, step=1, default=0, value=0)
-    contrast = make_slider(Integer, min=0, max=64, step=1, default=32, value=32)
-    saturation = make_slider(Integer, min=0, max=128, step=1, default=64, value=64)
-    hue = make_slider(Integer, min=-40, max=40, step=1, default=0, value=0)
-    gamma = make_slider(Integer, min=72, max=500, step=1, default=100, value=72)
-    gain = make_slider(Integer, min=0, max=100, step=1, default=0, value=54)
-    sharpness = make_slider(Integer, min=0, max=6, step=1, default=3, value=3)
-    exposure_absolute = make_slider(Integer, min=1, max=5000, step=1, default=157, value=1)
-
-	# white_balance_temperature = make_slider(Integer, min=2800, max=6500, step=1, default=4600, value=4600, flags=inactive)
-    # backlight_compensation = make_slider(Integer, min=0, max=2, step=1, default=1, value=0)
-
-	white_balance_temperature_auto = make_checkbox(default=1, value=1)
-	exposure_auto_priority = make_checkbox(default=0, value=0)
-
-	exposure_auto = make_slider(Integer, min=0, max=3, step=1, default=3, value=1)
-    power_line_frequency = make_slider(Integer, min=0, max=2, step=1, default=2, value=2)
-
-    map(capture_button) do click
-        img[] = rotr90(capture_frame(dev))
-		# img[] = rand(Gray, 1600, 1200)
-    end
-
-    map(brightness) do val; dev.controls["brightness"].value = val; end
-	map(contrast) do val; dev.controls["contrast"].value = val; end
-	map(saturation) do val; dev.controls["saturation"].value = val; end
-	map(gamma) do val; dev.controls["gamma"].value = val; end
-	map(gain) do val; dev.controls["gain"].value = val; end
-	map(exposure_absolute) do val; dev.controls["exposure_absolute"].value = val; end
-	map(sharpness) do val; dev.controls["sharpness"].value = val; end
-
-	map(exposure_auto) do val; dev.controls["exposure_auto"].value = val; end
-	map(power_line_frequency) do val; dev.controls["power_line_frequency"].value = val; end
-
-	map(white_balance_temperature_auto) do val; dev.controls["white_balance_temperature_auto"].value = val ? 1 : 0; end
-	map(exposure_auto_priority) do val; dev.controls["exposure_auto_priority"].value = val ? 1 : 0; end
-
     ctrls = md"""
 | Name | Value | Control |
 |:---- |:-------:| -----:|
@@ -138,12 +169,22 @@ app = App() do
 | exposure absolute | $(exposure_absolute.value) | $(exposure_absolute)|
 | exposure auto | $(exposure_auto.value) | $(exposure_auto)|
 """
-	plt = md"""
-$(capture_button)
-$(image(img))
-"""
+	plt = D.FlexCol(
+		D.FlexRow(
+			D.Card(DOM.div("continuous capture  ", continuous_capture)),
+			D.Card(capture_button),
+			# DOM.div("exposure", exposure_absolute, width="400px"),
+			width="100%"
+		),
+		image(img)
+	)
+
 	dom = D.FlexRow(
-		D.Card(ctrls, width="30%"),
+		D.FlexCol(
+			D.Card(ctrls),
+			D.Dropdown("Dropdown", [1, 2, 3]),
+			width="30%"
+		),
 		D.Card(plt, width="70%")
 	)
     return JSServe.DOM.div(JSServe.MarkdownCSS, JSServe.Styling, dom)
