@@ -47,7 +47,7 @@ end
 
 abstract type RemotePython end
 
-RemotePython(host::AbstractString, user::AbstractString="") = RPYCClassic(host, user)
+RemotePython(host::AbstractString, user::AbstractString=""; kwargs...) = RPYCClassic(host, user; kwargs...)
 struct RPYCClassic <: RemotePython
 	host
 	mach
@@ -56,9 +56,9 @@ struct RPYCClassic <: RemotePython
 	version
 	pid
 	
-	function RPYCClassic(host::AbstractString, user::AbstractString="")
+	function RPYCClassic(host::AbstractString, user::AbstractString=""; connect_timeout=60)
 		host = host
-		mach = plumbum[].SshMachine(host=host, user=user)
+		mach = plumbum[].SshMachine(host=host, user=user, connect_timeout=connect_timeout)
 		server = zerodeploy[].DeployedServer(mach)
 		rpy = server.classic_connect()
 		version = replace(pyconvert(String, rpy.modules.sys.version), "\n"=>"")

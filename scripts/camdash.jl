@@ -1,7 +1,7 @@
 using OpenFinch
 using PythonCall
 using Images, ImageShow, Colors
-using ImageMagick
+# using ImageMagick
 
 using JSServe, JSServe.DOM
 using JSServe: @js_str, onjs, onload, linkjs
@@ -19,11 +19,12 @@ using Observables, Markdown
 # hbox(args...) = DOM.div(args...)
 # vbox(args...) = DOM.div(args...)
 
-##
+
+hostname = "finch.local"
 
 JSServe.browser_display()
 
-rpi = RemotePython("finch.local")
+rpi = RemotePython(hostname)
 
 cv2			= rpi.modules.cv2
 v4l2py 		= rpi.modules.v4l2py
@@ -31,13 +32,7 @@ Device 		= v4l2py.Device
 VideoCapture= v4l2py.device.VideoCapture
 BufferType 	= v4l2py.device.BufferType
 PixelFormat	= v4l2py.PixelFormat
-
-dev = Device.from_id(0)
-dev.open()
-vc = VideoCapture(dev)
-# vc.set_format(1600, 1200, "YUYV")
-vc.set_format(1600, 1200, "MJPG")
-vc.open()
+pygpio		= rpi.modules.pigpio
 
 ##
 
@@ -50,14 +45,13 @@ end
 function capture_frame(vc)
 	fmt = vc.get_format()
 	if pyconvert(Bool, fmt.pixel_format == PixelFormat.MJPEG)
-		img = reverse(capture_raw(vc) |> IOBuffer |> ImageMagick.load, dims=(1,))
+		img = reverse(capture_raw(vc) |> IOBuffer |> load, dims=(1,))
 	else
 		a = reshape(capture_raw(vc), (2,1600,1200))
 		rotl90(Gray.(a[1,:,:]/255))
 	end
 end
 
-##
 
 function make_slider(T::Type{Integer}; max=0, min=0, step=0, default=0, value=0, kw...)
 	Slider(min:step:max, value=value)
@@ -71,18 +65,6 @@ img = Observable(rotr90(Gray.(rand(1600,1200))))
 
 capture_button = Button("capture frame")
 continuous_capture = make_checkbox()
-
-# boop = async_latest(capture_button)
-map(capture_button) do click
-    # img[] = rand(Gray, 1600, 1200)
-    img[] = rotr90(capture_frame(vc))
-	@async begin
-		yield()
-		if continuous_capture[]
-			capture_button[] = true
-		end
-	end
-end
 
 OV2311_defaults = Dict(
 	"brightness"					=> 0,
@@ -118,41 +100,81 @@ exposure_auto_priority = make_checkbox(default=0, value=0)
 exposure_auto = make_slider(Integer, min=0, max=3, step=1, default=3, value=1)
 power_line_frequency = make_slider(Integer, min=0, max=2, step=1, default=2, value=2)
 
-map(brightness) do val
+laser1 = make_checkbox(default=0, value=0)
+laser2 = make_checkbox(default=0, value=0)
+laser3 = make_checkbox(default=0, value=0)
+
+on(brightness) do val
     dev.controls["brightness"].value = val
 end
-map(contrast) do val
+on(contrast) do val
     dev.controls["contrast"].value = val
 end
-map(saturation) do val
+on(saturation) do val
     dev.controls["saturation"].value = val
 end
-map(gamma) do val
+on(gamma) do val
     dev.controls["gamma"].value = val
 end
-map(gain) do val
+on(gain) do val
     dev.controls["gain"].value = val
 end
-map(exposure_absolute) do val
+on(exposure_absolute) do val
     dev.controls["exposure_absolute"].value = val
 end
-map(sharpness) do val
+on(sharpness) do val
     dev.controls["sharpness"].value = val
 end
 
-map(exposure_auto) do val
+on(exposure_auto) do val
     dev.controls["exposure_auto"].value = val
 end
-map(power_line_frequency) do val
+on(power_line_frequency) do val
     dev.controls["power_line_frequency"].value = val
 end
 
-map(white_balance_temperature_auto) do val
+on(white_balance_temperature_auto) do val
     dev.controls["white_balance_temperature_auto"].value = val ? 1 : 0
 end
-map(exposure_auto_priority) do val
+
+on(exposure_auto_priority) do val
     dev.controls["exposure_auto_priority"].value = val ? 1 : 0
 end
+
+on(laser1) do val
+	pig.write(21, val ? 0 : 1)
+end
+
+import JpegTurbo
+function JpegTurbo._jpeg_check_bytes(data::Vector{UInt8})
+    length(data) > 623 || throw(ArgumentError("Invalid number of bytes."))
+    data[1:2] == [0xff, 0xd8] || throw(ArgumentError("Invalid JPEG byte sequence."))
+    # data[end-1:end] == [0xff, 0xd9] || @warn "Premature end of JPEG byte sequence."
+    return true
+end
+
+##
+pig = pygpio.pi()
+dev = Device.from_id(0)
+dev.open()
+vc = VideoCapture(dev)
+# vc.set_format(1600, 1200, "YUYV")
+vc.set_format(1600, 1200, "MJPG")
+vc.open()
+
+# boop = async_latest(capture_button)
+map(capture_button) do click
+    # img[] = rand(Gray, 1600, 1200)
+    img[] = rotr90(capture_frame(vc))
+    @async begin
+        yield()
+        if continuous_capture[]
+            capture_button[] = true
+        end
+    end
+end
+
+##
 
 app = App() do
     ctrls = md"""
@@ -169,29 +191,41 @@ app = App() do
 | exposure absolute | $(exposure_absolute.value) | $(exposure_absolute)|
 | exposure auto | $(exposure_auto.value) | $(exposure_auto)|
 """
-	plt = D.FlexCol(
-		D.FlexRow(
-			D.Card(DOM.div("continuous capture  ", continuous_capture)),
-			D.Card(capture_button),
-			# DOM.div("exposure", exposure_absolute, width="400px"),
-			width="100%"
-		),
-		image(img)
+
+    ctrls = D.FlexRow(
+		D.FlexCol(
+			DOM.div("gamma    				", gamma),
+			DOM.div("gain 	  				", gain),
+			DOM.div("exposure auto priority ", exposure_auto_priority),
+			DOM.div("exposure absolute 		", exposure_absolute),
+			DOM.div("exposure auto 			", exposure_auto),
+		)
+# 		D.FlexCol(
+# | sharpness | $(sharpness.value) | $(sharpness)|
+# | power line frequency | $(power_line_frequency.value) | $(power_line_frequency)|
+# | brightness | $(brightness.value) | $(brightness)|
+# | contrast | $(contrast.value) | $(contrast)|
+# | saturation | $(saturation.value) | $(saturation)|
+# 		)
 	)
 
-	dom = D.FlexRow(
+	plt = D.FlexRow(
+		image(img),
 		D.FlexCol(
-			D.Card(ctrls),
-			D.Dropdown("Dropdown", [1, 2, 3]),
-			width="30%"
+			D.Card(DOM.div("Laser 1 on ", laser1)),
+			D.Card(DOM.div("continuous capture  ", continuous_capture)),
+			D.Card(capture_button)
 		),
-		D.Card(plt, width="70%")
+	)
+
+	dom = D.FlexCol(
+		D.Card(plt),
+		D.Card(ctrls),
 	)
     return JSServe.DOM.div(JSServe.MarkdownCSS, JSServe.Styling, dom)
 end
 
 display(app)
-
 
 ##
 nothing
@@ -241,7 +275,7 @@ if false
 
 	free_pin = 17
 
-	p = Pi("finch.local")
+	p = Pi(hostname)
 
 	set_mode(p, free_pin, PiGPIO.OUTPUT)
 
