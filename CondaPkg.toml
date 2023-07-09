@@ -1,5 +1,7 @@
 [deps]
+opencv = ""
 rpyc = ""
 
 [pip.deps]
+pigpio = ""
 v4l2py = ""

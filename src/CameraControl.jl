@@ -4,6 +4,172 @@ using Images, ImageShow, Colors
 
 using PythonCall
 
+const v4l2py = Ref{Py}()
+const pigpio = Ref{Py}()
+const pig = Ref{Py}()
+
+function __init__()
+	v4l2py[] = pyimport("v4l2py")
+	pigpio[] = pyimport("pigpio")
+end
+
+function start_pigpio(host="localhost", port=8888)
+	pig[] = pigpio[].pi(host, port)
+	if ! pyconvert(Bool, pig[].connected)
+		error("Couldn't open connection to pigpiod")
+	end
+end
+
+function waitNotHalted(s)
+   for check ∈ 1:10
+      sleep(0.1)
+      e, p = pig[].script_status(s)
+      if Bool(e != pigpio[].PI_SCRIPT_HALTED)
+         return
+	  end
+	end
+end
+
+function testScript()
+	# @info("Script store/run/status/stop/delete tests.")
+	
+	LED_IN = 16
+	TRIGGER = 12
+	TRIGWIDTH = 100 # us
+	LED_OUT = 21
+	LED_WIDTH = 100 # us
+
+	# toggle every 5 us (100 kHz)
+	# p0 number of loops
+	# p1 GPIO
+	script="""
+		ld v0 p0
+	tag 0
+		w p1 1
+		mics 5
+		w p1 0
+		mics 3
+		dcr v0
+		jp 0
+	"""
+
+	script="""
+		ld v0 p0
+	tag 0
+		mics 10
+		r 16
+		jz 1
+		w p1 1
+		jmp 2
+	tag 1
+		w p1 0
+	tag 2
+		dcr v0
+		jp 0
+	"""
+
+	script="""
+		ld v0 p0
+
+	tag 0
+		r $LED_IN
+		jz 0
+
+	tag 1
+		r $LED_IN
+		jnz 1
+
+		w $TRIGGER 0
+		mics $TRIGWIDTH
+		w $TRIGGER 1
+
+		mics 100
+		mics 100
+		mics 100
+
+		w $LED_OUT 0
+		mics $LED_WIDTH
+		w $LED_OUT 1
+
+		dcr v0
+		jp 0
+	"""
+
+	cb = pig[].callback(TRIGGER)
+	old_exceptions = pigpio[].exceptions
+	pigpio[].exceptions = pybool(false)
+	s = pig[].store_script(script)
+
+	try
+		# Ensure the script has finished initing.
+		while true
+			e, p = pig[].script_status(s)
+			if Bool(e != pigpio[].PI_SCRIPT_INITING)
+				break
+			end
+			sleep(0.1)
+		end
+
+		oc = cb.tally()
+		pig[].run_script(s, [1200, 12, 21])
+
+		waitNotHalted(s)
+
+		while true
+			e, p = pig[].script_status(s)
+			if Bool(e != pigpio[].PI_SCRIPT_RUNNING)
+				break
+			end
+			sleep(0.1)
+		end
+	
+		sleep(0.2)
+		c = cb.tally() - oc
+		@info c
+
+# 	CHECK(9, 1, c, 100, 0, "store/run script")
+
+#    	oc = cb.tally()
+#    	pig[].run_script(s, [200, GPIO])
+
+#    t9waitNotHalted(s)
+
+#    while True:
+#       e, p = pig[].script_status(s)
+#       if e != pigpio.PI_SCRIPT_RUNNING:
+#          break
+#       time.sleep(0.1)
+#    time.sleep(0.2)
+#    c = cb.tally() - oc
+#    CHECK(9, 2, c, 201, 0, "run script/script status")
+
+#    oc = cb.tally()
+#    pig[].run_script(s, [2000, GPIO])
+
+#    t9waitNotHalted(s)
+
+#    while True:
+#       e, p = pig[].script_status(s)
+#       if e != pigpio.PI_SCRIPT_RUNNING:
+#          break
+#       if p[9] < 1900:
+#          pig[].stop_script(s)
+#       time.sleep(0.1)
+#    time.sleep(0.2)
+#    c = cb.tally() - oc
+#    CHECK(9, 3, c, 110, 20, "run/stop script/script status")
+
+#    e = pig[].delete_script(s)
+#    CHECK(9, 4, e, 0, 0, "delete script")
+
+	finally
+   		cb.cancel()
+   		pig[].stop_script(s)
+   		pig[].delete_script(s)
+		pigpio[].exceptions = old_exceptions
+	end
+end
+
 if false
 	rpyc		= pyimport("rpyc")
 	plumbum		= pyimport("plumbum")

@@ -19,7 +19,7 @@ include("SLM.jl")
 using .SLM
 
 # export RPYC.remotePython
-export RPYC, SLM
+export RPYC, SLM, CameraControl
 export RemotePython
 
 end # module
