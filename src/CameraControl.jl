@@ -30,75 +30,104 @@ function waitNotHalted(s)
 	end
 end
 
-function testScript()
+function testScript(n = 1)
 	# @info("Script store/run/status/stop/delete tests.")
 	
-	LED_IN = 16
-	TRIGGER = 12
-	TRIGWIDTH = 100 # us
-	LED_OUT = 21
-	LED_WIDTH = 100 # us
-
-	# toggle every 5 us (100 kHz)
-	# p0 number of loops
-	# p1 GPIO
-	script="""
-		ld v0 p0
-	tag 0
-		w p1 1
-		mics 5
-		w p1 0
-		mics 3
+    script = """
+     	ld v0 p0
 		dcr v0
-		jp 0
-	"""
+		w 26 1
 
-	script="""
-		ld v0 p0
 	tag 0
-		mics 10
-		r 16
-		jz 1
-		w p1 1
-		jmp 2
+		r p1
+     	jz 0
+
+		w 26 0
+
 	tag 1
-		w p1 0
+     	r p1
+     	jnz 1
+
+		w 26 1
+
+		mics p2
+
+		w 26 0
+
+     	w p3 0
+     	mics p4
+     	w p3 1
+
+		w 26 1
+
 	tag 2
+     	r p9
+     	jz 2
+
+		w 26 0
+
+	tag 3
+     	r p5
+     	jz 3
+		
+		w 26 1
+
+	tag 4
+     	r p5
+     	jnz 4
+		
+		w 26 0
+
+     	mics p6
+
+		w 26 1
+
+     	w p7 0
+     	mics p8
+     	w p7 1
+
+		w 26 0
+
+	tag 5
+     	r p9
+     	jnz 5
+
+		w 26 1
+
+	tag 6
+     	r p9
+     	jz 6
+		
+		w 26 0
+
+	tag 7
+     	r p9
+     	jnz 7
+
+		w 26 1
+
+		mils 175
+
 		dcr v0
-		jp 0
+     	jp 0
 	"""
+	
+	N_EXPOSURES = n
+	TRIG_IN = 20 			# p1
+	TRIG_DELAY = 100		# p2
+	TRIG_OUT = 12 			# p3
+	TRIG_WIDTH = 100 		# p4
+	LED_IN = 16 			# p5
+	LED_DELAY = 200 		# p6
+	LED_OUT = 21 			# p7
+	LED_WIDTH = 500 		# p8
+	STROBE_IN = 13 			# p9
 
-	script="""
-		ld v0 p0
-
-	tag 0
-		r $LED_IN
-		jz 0
-
-	tag 1
-		r $LED_IN
-		jnz 1
-
-		w $TRIGGER 0
-		mics $TRIGWIDTH
-		w $TRIGGER 1
-
-		mics 100
-		mics 100
-		mics 100
-
-		w $LED_OUT 0
-		mics $LED_WIDTH
-		w $LED_OUT 1
-
-		dcr v0
-		jp 0
-	"""
-
-	cb = pig[].callback(TRIGGER)
+	cb = pig[].callback(TRIG_OUT)
 	old_exceptions = pigpio[].exceptions
 	pigpio[].exceptions = pybool(false)
 	s = pig[].store_script(script)
+	@info "Stored script $s"
 
 	try
 		# Ensure the script has finished initing.
@@ -111,7 +140,11 @@ function testScript()
 		end
 
 		oc = cb.tally()
-		pig[].run_script(s, [1200, 12, 21])
+
+		pig[].run_script(s,	[N_EXPOSURES, 
+			TRIG_IN, TRIG_DELAY, TRIG_OUT, TRIG_WIDTH,
+			LED_IN, LED_DELAY, LED_OUT, LED_WIDTH,
+			STROBE_IN])
 
 		waitNotHalted(s)
 
@@ -161,11 +194,15 @@ function testScript()
 
 #    e = pig[].delete_script(s)
 #    CHECK(9, 4, e, 0, 0, "delete script")
-
+	catch err
+		@info "Caught error $err"
 	finally
+		@info "Cancelling callback"
    		cb.cancel()
-   		pig[].stop_script(s)
-   		pig[].delete_script(s)
+		@info "Stopping script $s"
+		pig[].stop_script(s)
+		@info "Deleting script $s"
+		pig[].delete_script(s)
 		pigpio[].exceptions = old_exceptions
 	end
 end

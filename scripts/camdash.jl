@@ -19,39 +19,7 @@ using Observables, Markdown
 # hbox(args...) = DOM.div(args...)
 # vbox(args...) = DOM.div(args...)
 
-
-hostname = "finch.local"
-
 JSServe.browser_display()
-
-rpi = RemotePython(hostname)
-
-cv2			= rpi.modules.cv2
-v4l2py 		= rpi.modules.v4l2py
-Device 		= v4l2py.Device
-VideoCapture= v4l2py.device.VideoCapture
-BufferType 	= v4l2py.device.BufferType
-PixelFormat	= v4l2py.PixelFormat
-pygpio		= rpi.modules.pigpio
-
-##
-
-function capture_raw(vc)
-	it = @py iter(vc)
-	frame = @py next(it)
-	return pyconvert(Array, frame.array)
-end
-
-function capture_frame(vc)
-	fmt = vc.get_format()
-	if pyconvert(Bool, fmt.pixel_format == PixelFormat.MJPEG)
-		img = reverse(capture_raw(vc) |> IOBuffer |> load, dims=(1,))
-	else
-		a = reshape(capture_raw(vc), (2,1600,1200))
-		rotl90(Gray.(a[1,:,:]/255))
-	end
-end
-
 
 function make_slider(T::Type{Integer}; max=0, min=0, step=0, default=0, value=0, kw...)
 	Slider(min:step:max, value=value)
@@ -104,45 +72,80 @@ laser1 = make_checkbox(default=0, value=0)
 laser2 = make_checkbox(default=0, value=0)
 laser3 = make_checkbox(default=0, value=0)
 
-on(brightness) do val
-    dev.controls["brightness"].value = val
-end
-on(contrast) do val
-    dev.controls["contrast"].value = val
-end
-on(saturation) do val
-    dev.controls["saturation"].value = val
-end
-on(gamma) do val
-    dev.controls["gamma"].value = val
-end
-on(gain) do val
-    dev.controls["gain"].value = val
-end
-on(exposure_absolute) do val
-    dev.controls["exposure_absolute"].value = val
-end
-on(sharpness) do val
-    dev.controls["sharpness"].value = val
+handlers = [
+	on(brightness) do val
+		dev.controls["brightness"].value = val
+	end
+	on(contrast) do val
+		dev.controls["contrast"].value = val
+	end
+	on(saturation) do val
+		dev.controls["saturation"].value = val
+	end
+	on(gamma) do val
+		dev.controls["gamma"].value = val
+	end
+	on(gain) do val
+		dev.controls["gain"].value = val
+	end
+	on(exposure_absolute) do val
+		dev.controls["exposure_absolute"].value = val
+	end
+	on(sharpness) do val
+		dev.controls["sharpness"].value = val
+	end
+
+	on(exposure_auto) do val
+		dev.controls["exposure_auto"].value = val
+	end
+	on(power_line_frequency) do val
+		dev.controls["power_line_frequency"].value = val
+	end
+
+	on(white_balance_temperature_auto) do val
+		dev.controls["white_balance_temperature_auto"].value = val ? 1 : 0
+	end
+
+	on(exposure_auto_priority) do val
+		dev.controls["exposure_auto_priority"].value = val ? 1 : 0
+	end
+
+	on(laser1) do val
+		pig.write(21, val ? 0 : 1)
+	end
+]
+
+cap_handler = on(capture_button) do click
+    # img[] = rand(Gray, 1600, 1200)
+    img[] = rotr90(capture_frame(vc))
+    @async begin
+        yield()
+        if continuous_capture[]
+            capture_button[] = true
+        end
+    end
 end
 
-on(exposure_auto) do val
-    dev.controls["exposure_auto"].value = val
-end
-on(power_line_frequency) do val
-    dev.controls["power_line_frequency"].value = val
-end
+##
 
-on(white_balance_temperature_auto) do val
-    dev.controls["white_balance_temperature_auto"].value = val ? 1 : 0
-end
-
-on(exposure_auto_priority) do val
-    dev.controls["exposure_auto_priority"].value = val ? 1 : 0
-end
-
-on(laser1) do val
-	pig.write(21, val ? 0 : 1)
+if false
+    rpi = RemotePython(finch.local)
+    pygpio = rpi.modules.pigpio
+    cv2 = rpi.modules.cv2
+    v4l2py = rpi.modules.v4l2py
+    Device = v4l2py.Device
+    VideoCapture = v4l2py.device.VideoCapture
+    BufferType = v4l2py.device.BufferType
+    PixelFormat = v4l2py.PixelFormat
+else
+    rpi = nothing
+    pygpio = pyimport("pigpio")
+    cv2 = pyimport("cv2")
+    v4l2py = pyimport("v4l2py")
+    Device = v4l2py.Device
+    VideoCapture = v4l2py.device.VideoCapture
+    BufferType = v4l2py.device.BufferType
+    PixelFormat = v4l2py.PixelFormat
 end
 
 import JpegTurbo
@@ -153,7 +156,26 @@ function JpegTurbo._jpeg_check_bytes(data::Vector{UInt8})
     return true
 end
 
+function capture_raw(vc)
+    it = @py iter(vc)
+    frame = @py next(it)
+    return pyconvert(Array, frame.array)
+end
+
+function capture_frame(vc)
+    fmt = vc.get_format()
+    width, height = fmt.width, fmt.height
+    if pyconvert(Bool, fmt.pixel_format == PixelFormat.MJPEG)
+        # img = reverse(Gray.(capture_raw(vc) |> IOBuffer |> load), dims=(1,))
+		img = reverse(JpegTurbo.jpeg_decode(Gray, capture_raw(vc)), dims=(1,))
+    else
+        a = reshape(capture_raw(vc), (2, height, width))
+        rotl90(Gray.(a[1, :, :] / 255))
+    end
+end
+
 ##
+
 pig = pygpio.pi()
 dev = Device.from_id(0)
 dev.open()
@@ -161,18 +183,6 @@ vc = VideoCapture(dev)
 # vc.set_format(1600, 1200, "YUYV")
 vc.set_format(1600, 1200, "MJPG")
 vc.open()
-
-# boop = async_latest(capture_button)
-map(capture_button) do click
-    # img[] = rand(Gray, 1600, 1200)
-    img[] = rotr90(capture_frame(vc))
-    @async begin
-        yield()
-        if continuous_capture[]
-            capture_button[] = true
-        end
-    end
-end
 
 ##
 
@@ -223,7 +233,7 @@ app = App() do
 		D.Card(ctrls),
 	)
     return JSServe.DOM.div(JSServe.MarkdownCSS, JSServe.Styling, dom)
-end
+end;
 
 display(app)
 
