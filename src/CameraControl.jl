@@ -115,15 +115,15 @@ function testScript(n = 1)
 	N_EXPOSURES = n
 	TRIG_IN = 20 			# p1
 	TRIG_DELAY = 100		# p2
-	TRIG_OUT = 12 			# p3
+	TRIG_OUT = 5 			# p3
 	TRIG_WIDTH = 100 		# p4
 	LED_IN = 16 			# p5
 	LED_DELAY = 200 		# p6
 	LED_OUT = 21 			# p7
 	LED_WIDTH = 500 		# p8
-	STROBE_IN = 13 			# p9
+	STROBE_IN = 6 			# p9
 
-	cb = pig[].callback(TRIG_OUT)
+	# cb = pig[].callback(TRIG_OUT)
 	old_exceptions = pigpio[].exceptions
 	pigpio[].exceptions = pybool(false)
 	s = pig[].store_script(script)
@@ -139,7 +139,7 @@ function testScript(n = 1)
 			sleep(0.1)
 		end
 
-		oc = cb.tally()
+		# oc = cb.tally()
 
 		pig[].run_script(s,	[N_EXPOSURES, 
 			TRIG_IN, TRIG_DELAY, TRIG_OUT, TRIG_WIDTH,
@@ -157,8 +157,8 @@ function testScript(n = 1)
 		end
 	
 		sleep(0.2)
-		c = cb.tally() - oc
-		@info c
+		# c = cb.tally() - oc
+		# @info c
 
 # 	CHECK(9, 1, c, 100, 0, "store/run script")
 
@@ -197,8 +197,8 @@ function testScript(n = 1)
 	catch err
 		@info "Caught error $err"
 	finally
-		@info "Cancelling callback"
-   		cb.cancel()
+		# @info "Cancelling callback"
+   		# cb.cancel()
 		@info "Stopping script $s"
 		pig[].stop_script(s)
 		@info "Deleting script $s"

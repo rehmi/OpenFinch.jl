@@ -18,6 +18,7 @@ Observables = "510215fc-4207-5dde-b226-833fc4488ee2"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
 VideoIO = "d6d074c3-1acf-5d4c-9a43-ef38773959a2"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
