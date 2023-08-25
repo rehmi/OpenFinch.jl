@@ -64,35 +64,28 @@ trigger_script = """
 	dcr v0					# predecrement v0 because JP considers 0 to be positive
 
 tag 0	r p1	jz 0 		# loop until TRIG_IN is HIGH
-tag 1	r p1	jnz 1 		# loop until TRIG_IN is LOW
-							# just saw falling edge on TRIG_IN
+tag 1	r p1	jnz 1 		# await falling edge on TRIG_IN
 
 	mics p2 				# wait TRIG_DELAY µs
 
-	w p3 0	mics p4	w p3 1  # send negative pulse to TRIG_OUT for TRIG_WIDTH µs
+	w p3 0	mics p4	w p3 1  # pulse TRIG_OUT LOW for TRIG_WIDTH µs
 
-tag 2	r p9	jz 2 		# loop until STROBE_IN goes HIGH
-							# just saw rising edge on STROBE_IN
+tag 2	r p9	jz 2 		# await rising edge on STROBE_IN
 
 tag 3	r p5	jz 3 		# loop until LED_IN is HIGH
-tag 4	r p5	jnz 4		# loop until LED_IN goes LOW
-							# just saw rising edge on LED_IN
+tag 4	r p5	jnz 4		# await falling edge on LED_IN
 	
 	mics p6					# wait LED_DELAY µs
 
 	w p7 0	mics p8	w p7 1 	# pulse LED_OUT LOW for LED_WIDTH µs
 
-	w 27 1
+							# uncomment the next two lines for manual trigger
+# tag 5	r p9	jnz 5 		# loop until STROBE_IN is LOW
+# tag 6	r p9	jz 6		# await rising edge on STROBE_IN
 
-tag 5	r p9	jnz 5 		# loop until STROBE_IN is LOW
-tag 6	r p9	jz 6		# loop until STROBE_IN goes HIGH
-							# just saw rising edge on STROBE_IN
-tag 7	r p9	jnz 7		# loop until STROBE_IN goes low
-							# just saw falling edge on STROBE_IN
+tag 7	r p9	jnz 7		# await falling edge on STROBE_IN
 
-	w 27 0
-	
-	mils 125				# need this to wait for end of second strobe
+	# mils 125				# need to wait before issuing another manual trigger
 
 	dcr v0
     jp 0
@@ -109,7 +102,7 @@ function trigger(n = 1)
 	LED_IN = 22 			# p5
 	LED_DELAY = 200 		# p6
 	LED_OUT = 17 			# p7
-	LED_WIDTH = 250 		# p8
+	LED_WIDTH = 500 		# p8
 	STROBE_IN = 6 			# p9
 
 	# cb = pig[].callback(TRIG_OUT)
