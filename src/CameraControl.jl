@@ -4,6 +4,37 @@ using Images, ImageShow, Colors
 
 using PythonCall
 
+struct PiGPIOScript
+	pig
+	index
+	pptext
+	text
+
+	function PiGPIOScript(pig, text)
+		pptext = preprocess_script(text)
+		index = pig.store_script(pptext)
+		new(pig, index, pptext, text)
+	end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", scr::PiGPIOScript)
+	print(io, "PiGPIOScript($(scr.pig), index=$(scr.index))")
+end
+
+function Base.delete!(scr::PiGPIOScript)
+	scr.pig.delete_script(scr.index)
+end
+
+function Base.run(scr::PiGPIOScript, args...)
+    scr.pig.run_script(scr.index, collect(args))
+end
+
+function stop(scr::PiGPIOScript)
+	scr.pig.stop_script(scr.index)
+end
+
+export PiGPIOScript, stop
+
 const v4l2py = Ref{Py}()
 const pigpio = Ref{Py}()
 const pig = Ref{Py}()
@@ -20,19 +51,74 @@ function start_pigpio(host="localhost", port=8888)
 	end
 end
 
+function start_pig(host="localhost", port=8888)
+    pig = pigpio[].pi(host, port)
+    if !pyconvert(Bool, pig.connected)
+        error("Couldn't open connection to pigpiod")
+    end
+	return pig
+end
+
+@enum ScriptStatus begin
+	INITING = 0
+	HALTED = 1
+	RUNNING = 2
+	WAITING = 3
+	FAILED = 4
+end
+
+export start_pigpio, start_pig
+export storeScript, runScript, stopScript, deleteScript
+export ScriptStatus
+export scriptStatus, scriptHalted, scriptIniting, scriptRunning
+
+function scriptStatus(scr::PiGPIOScript)
+    e, p = scr.pig.script_status(scr.index)
+    p = Int64.(reinterpret(UInt32, Int32.(collect(pyconvert(Tuple, p)))))
+    e = ScriptStatus(pyconvert(Int, e))
+    return e, p
+end
+
+function scriptStatus(s::Int)
+	e, p = pig[].script_status(s)
+	p = Int64.(reinterpret(UInt32, Int32.(collect(pyconvert(Tuple, p)))))
+	e = ScriptStatus(pyconvert(Int, e))
+	return e, p
+end
+
 function scriptHalted(s)
-    e, p = pig[].script_status(s)
-    return Bool(e == pigpio[].PI_SCRIPT_HALTED)
+    e, p = scriptStatus(s)
+    return e == HALTED
 end
 
 function scriptIniting(s)
-    e, p = pig[].script_status(s)
-    return Bool(e == pigpio[].PI_SCRIPT_INITING)
+    e, p = scriptStatus(s)
+    return e == INITING
 end
 
 function scriptRunning(s)
-    e, p = pig[].script_status(s)
-    return Bool(e == pigpio[].PI_SCRIPT_RUNNING)
+    e, p = scriptStatus(s)
+    return e == RUNNING
+end
+
+function storeScript(script)
+    s = pyconvert(Int, pig[].store_script(preprocess_script(script)))
+    @info "Stored script $s"
+    return s
+end
+
+function runScript(s, args...)
+    pig[].run_script(s, collect(args))
+end
+
+function stopScript(s)
+	@info "Stopping script $s"
+	pig[].stop_script(s)
+end
+
+function deleteScript(s)
+	@info "Deleting script $s"
+	pig[].delete_script(s)
 end
 
 function preprocess_script(scr)
@@ -48,68 +134,112 @@ function preprocess_script(scr)
 	return join(nonempty, "\n")
 end
 
-trigger_script = """
-	# p0: N_EXPOSURES
-	# p1: TRIG_IN
-	# p2: TRIG_DELAY
-	# p3: TRIG_OUT
-	# p4: TRIG_WIDTH
-	# p5: LED_IN
-	# p6: LED_DELAY
-	# p7: LED_OUT
-	# p8: LED_WIDTH
-	# p9: STROBE_IN
-   	
-	ld v0 p0				# load N_EXPOSURES into v0
-	dcr v0					# predecrement v0 because JP considers 0 to be positive
+function trigger_script(;
+	TRIG_IN = 25,
+	TRIG_DELAY = 100,
+	TRIG_OUT = 5,
+	TRIG_WIDTH = 50,
+	LED_IN = 22,
+	LED_DELAY = 100,
+	LED_OUT = 17,	
+	LED_WIDTH = 800,
+	STROBE_IN = 6,
+	INTERFRAME_DELAY = 16
+)
 
-tag 0	r p1	jz 0 		# loop until TRIG_IN is HIGH
-tag 1	r p1	jnz 1 		# await falling edge on TRIG_IN
+	script = """
+	tick	sta p8						# track the current tick
+	pads 0 16							# drive GPIO 0-27 @ 16 mA
+   	# ld v0 p0							# load parameter 0 into v0
+   	dcr p0								# predecrement v0 because JP checks >= 0
 
-	mics p2 				# wait TRIG_DELAY µs
+tag 0
+	lda $TRIG_IN
+	call 501							# loop until TRIG_IN is HIGH
+	call 510							# wait for falling edge on TRIG_IN
 
-	w p3 0	mics p4	w p3 1  # pulse TRIG_OUT LOW for TRIG_WIDTH µs
+   	lda $TRIG_DELAY		call 555		# delay for TRIG_DELAY µs
 
-tag 2	r p9	jz 2 		# await rising edge on STROBE_IN
+	w $TRIG_OUT 0
+	lda $TRIG_WIDTH		call 555
+	w $TRIG_OUT 1
 
-tag 3	r p5	jz 3 		# loop until LED_IN is HIGH
-tag 4	r p5	jnz 4		# await falling edge on LED_IN
+	lda $STROBE_IN
+	call 510							# wait for rising edge on STROBE_IN
+	call 501							# wait for falling edge on STROBE_IN
+	# call 510
+	# call 501
+
+	lda $LED_IN
+	call 501
+	call 510
+
+   	lda $LED_DELAY		call 555		# delay for LED_DELAY µs
+
+	w $LED_OUT 0
+	lda $LED_WIDTH		call 555
+	w $LED_OUT 1
+
+	lda $STROBE_IN
+	# uncomment the next two lines when triggering camera
+	call 510						 	# wait for STROBE_IN to go LOW
+	call 501							# wait for rising edge on STROBE_IN
+	call 510							# wait for falling edge on STROBE_IN
+
+   	# mils $INTERFRAME_DELAY				# must wait (why?) before issuing another manual trigger
+	lda $INTERFRAME_DELAY
+	mlt 1000
+	call 555
+
+	tick	sta p9						# track the current tick
+	evt		0
 	
-	mics p6					# wait LED_DELAY µs
+   	dcr p0
+	jp 0
+	ld p0 0
+	ret
 
-	w p7 0	mics p8	w p7 1 	# pulse LED_OUT LOW for LED_WIDTH µs
+	# wait for rising edge on pin A
+tag 501
+	xa v5
+tag 5011
+	r v5
+	jz 5011
+	xa v5
+	ret
 
-							# uncomment the next two lines for manual trigger
-# tag 5	r p9	jnz 5 		# loop until STROBE_IN is LOW
-# tag 6	r p9	jz 6		# await rising edge on STROBE_IN
+	# wait for falling edge on pin A
+tag 510
+	xa v5
+tag 5101
+	r v5
+	jnz 5101
+	xa v5
+	ret
 
-tag 7	r p9	jnz 7		# await falling edge on STROBE_IN
+	# wait for A microseconds in small bursts
+tag 555
+	ld v5 45							# maximum wait time
+tag 5551
+   	cmp v5
+   	jm 5552
+   	pusha
+   	mics v5
+   	popa
+   	sub v5
+   	jmp 5551
+tag 5552
+   	sta v5
+   	mics v5
+	ret
 
-	# mils 125				# need to wait before issuing another manual trigger
+	"""
 
-	dcr v0
-    jp 0
-"""
+	return script
+end
 
-
-function trigger(n = 1)
-	
-	N_EXPOSURES = n			# p0
-	TRIG_IN = 24 			# p1
-	TRIG_DELAY = 100		# p2
-	TRIG_OUT = 5 			# p3
-	TRIG_WIDTH = 100 		# p4
-	LED_IN = 22 			# p5
-	LED_DELAY = 200 		# p6
-	LED_OUT = 17 			# p7
-	LED_WIDTH = 500 		# p8
-	STROBE_IN = 6 			# p9
-
-	# cb = pig[].callback(TRIG_OUT)
-	old_exceptions = pigpio[].exceptions
-	pigpio[].exceptions = pybool(false)
-	s = pig[].store_script(preprocess_script(trigger_script))
-	@info "Stored script $s"
+function trigger(n=1)
+	s = storeScript(trigger_script())
 
 	try
 		# Ensure the script has finished initializing.
@@ -117,30 +247,32 @@ function trigger(n = 1)
 			sleep(0.01)
 		end
 
-		pig[].run_script(s,	[
-			N_EXPOSURES, 
-			TRIG_IN, TRIG_DELAY, TRIG_OUT, TRIG_WIDTH,
-			LED_IN, LED_DELAY, LED_OUT, LED_WIDTH,
-			STROBE_IN
-		])
-
+		runScript(s, n)
+		
 		while scriptHalted(s)
 			sleep(0.01)
 		end
 
-		while scriptRunning(s)
-			sleep(0.01)
+        while scriptRunning(s)
+			sleep(0.1)
 		end
-	
+
+		return scriptStatus(s)
 	catch err
 		@info "Caught error $err"
 	finally
-		@info "Stopping script $s"
-		pig[].stop_script(s)
-		@info "Deleting script $s"
-		pig[].delete_script(s)
-		pigpio[].exceptions = old_exceptions
+        stopScript(s)
+        status = scriptStatus(s)
+		tic = status[2][9]
+        toc = status[2][10]
+		np = status[2][1]
+        @info "Parameters at end: " status
+        time_s = (toc - tic) / 1e6
+        fps = (n-np) / time_s
+        @info "Runtime $time_s s ($fps fps)"
+		deleteScript(s)
 	end
 end
+
 
 end # module CameraControl
