@@ -9,24 +9,21 @@ module OpenFinch
 
 # export finch_worker
 
+using Reexport
+
 include("CameraControl.jl")
-using .CameraControl
-export CameraControl
-export PiGPIOScript, stop, start_pigpio, start_pig
-export storeScript, runScript, stopScript, deleteScript
-export ScriptStatus
-export scriptStatus, scriptHalted, scriptIniting, scriptRunning
+@reexport using .CameraControl
 
 include("Dashboard.jl")
-using .Dashboard
+@reexport using .Dashboard
 
 include("RPYC.jl")
-using .RPYC
-export RPYC
-export RemotePython
+@reexport using .RPYC
+# export RPYC
+# export RemotePython
 
 include("SLM.jl")
-using .SLM
-export SLM
+@reexport using .SLM
+# export SLM
 
 end # module

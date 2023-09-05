@@ -4,7 +4,7 @@ using Images, ImageShow, Colors
 
 using PythonCall
 
-struct PiGPIOScript
+mutable struct PiGPIOScript
 	pig
 	index
 	pptext
@@ -12,20 +12,25 @@ struct PiGPIOScript
 
 	function PiGPIOScript(pig, text)
 		pptext = preprocess_script(text)
-		index = pig.store_script(pptext)
-		new(pig, index, pptext, text)
+		index = pyconvert(Int, pig.store_script(pptext))
+		function f(o)
+			stop(o)
+			delete!(o)
+			o.index = -1
+		end
+		finalizer(f, new(pig, index, pptext, text))
 	end
 end
 
 function Base.show(io::IO, ::MIME"text/plain", scr::PiGPIOScript)
-	print(io, "PiGPIOScript($(scr.pig), index=$(scr.index))")
+	print(io, "PiGPIOScript($(scr.pig), index=$(scr.index), status=$(status(scr)))")
 end
 
 function Base.delete!(scr::PiGPIOScript)
 	scr.pig.delete_script(scr.index)
 end
 
-function Base.run(scr::PiGPIOScript, args...)
+function start(scr::PiGPIOScript, args...)
     scr.pig.run_script(scr.index, collect(args))
 end
 
@@ -33,7 +38,20 @@ function stop(scr::PiGPIOScript)
 	scr.pig.stop_script(scr.index)
 end
 
-export PiGPIOScript, stop
+Base.run(scr::PiGPIOScript, args...) = start(scr, args)
+halt(scr::PiGPIOScript) = stop(scr)
+
+function status(scr::PiGPIOScript)
+	if scr.index < 0
+		return :FINALIZED
+	end
+    e, p = scr.pig.script_status(scr.index)
+    p = Int64.(reinterpret(UInt32, Int32.(collect(pyconvert(Tuple, p)))))
+    e = ScriptStatus(pyconvert(Int, e))
+    return e, p
+end
+
+export PiGPIOScript, stop, start, halt, status
 
 const v4l2py = Ref{Py}()
 const pigpio = Ref{Py}()
@@ -71,13 +89,6 @@ export start_pigpio, start_pig
 export storeScript, runScript, stopScript, deleteScript
 export ScriptStatus
 export scriptStatus, scriptHalted, scriptIniting, scriptRunning
-
-function scriptStatus(scr::PiGPIOScript)
-    e, p = scr.pig.script_status(scr.index)
-    p = Int64.(reinterpret(UInt32, Int32.(collect(pyconvert(Tuple, p)))))
-    e = ScriptStatus(pyconvert(Int, e))
-    return e, p
-end
 
 function scriptStatus(s::Int)
 	e, p = pig[].script_status(s)
@@ -132,6 +143,70 @@ function preprocess_script(scr)
 	nonempty = filter(line->!isempty(line), stripped)
 	# rejoin the nonempty lines into a single string
 	return join(nonempty, "\n")
+end
+
+export trigger_wave_script
+function trigger_wave_script(pig;
+	TRIG_IN = 25,
+	TRIG_DELAY = 10,
+	TRIG_OUT = 5,
+	TRIG_WIDTH = 50,
+	LED_IN = 22,
+	LED_DELAY = 5555,
+	LED_OUT = 17,	
+	LED_WIDTH = 800,
+	STROBE_IN = 6,
+	INTERFRAME_DELAY = 16_000,
+	G1 = 23,
+	G2 = 27
+
+)
+	p = pigpio[]
+	
+	for pin ∈ [G1, G2, TRIG_OUT, LED_OUT]
+		pig.set_mode(pin, p.OUTPUT)
+	end
+	for pin ∈ [TRIG_IN, LED_IN, STROBE_IN]
+		pig.set_mode(pin, p.INPUT)
+	end
+
+	wave = @py []
+	wave.append(p.pulse(1<<G1, 0, TRIG_DELAY))
+	wave.append(p.pulse(0, 1<<TRIG_OUT, TRIG_WIDTH))
+	wave.append(p.pulse(1<<TRIG_OUT, 0, LED_DELAY))
+	wave.append(p.pulse(0, 1<<LED_OUT, LED_WIDTH))
+	wave.append(p.pulse(1<<LED_OUT, 1<<G1, INTERFRAME_DELAY))
+	pig.wave_add_generic(wave)
+	wave_id = pyconvert(Int, pig.wave_create())
+
+	script = PiGPIOScript(pig, """
+	pads 0 16
+tag 100
+
+tag 101	r $TRIG_IN	jz 101
+tag 102	r $TRIG_IN	jnz 102
+
+	wvtx $wave_id
+
+	mils 35
+
+#	w $G2 1
+#	lda $STROBE_IN	call 501	w $G2 0
+#	lda $STROBE_IN	call 510	w $G2 1
+#	lda $STROBE_IN	call 501	w $G2 0
+#	lda $STROBE_IN	call 510	w $G2 1
+#	mils 16
+#	w $G2 0
+	
+	jmp 100
+
+# tag 103
+# 	wvbsy
+# 	jnz 103
+# 	jmp 100
+
+	"""
+    )
 end
 
 function trigger_script(;
