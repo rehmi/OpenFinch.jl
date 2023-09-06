@@ -214,7 +214,7 @@ end
 
 function trigger_loop(pig; n=100, t_min=1200, t_max=1200+8333, kwargs...)
 	c = Int(floor((t_max-t_min)/n))
-	for i = 0:n
+	time = @elapsed for i = 0:n
 		s = CameraControl.trigger_wave_script(pig; LED_TIME=t_min+i*c, kwargs...)
 		while status(s)[1]==CameraControl.INITING; sleep(0.01); end
 		start(s)
@@ -224,6 +224,7 @@ function trigger_loop(pig; n=100, t_min=1200, t_max=1200+8333, kwargs...)
 		pig.wave_clear()
 		# finalize(s)
 	end
+	@info "$(n/time) fps"
 end
 export trigger_loop
 
