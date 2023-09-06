@@ -2,3 +2,4 @@
 /.CondaPkg
 misc/
 .vscode/
+.DS_Store

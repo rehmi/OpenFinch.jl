@@ -170,7 +170,7 @@ function trigger_wave_script(pig;
 	LED_OUT = 17,	
 	LED_WIDTH = 250,
 	STROBE_IN = 6,
-	WAVE_DURATION = 10_000,
+	WAVE_DURATION = 16_667,
 	G1 = 23,
 	G2 = 27
 )
@@ -218,8 +218,8 @@ function trigger_loop(pig; n=100, t_min=1200, t_max=1200+8333, kwargs...)
 		s = CameraControl.trigger_wave_script(pig; LED_TIME=t_min+i*c, kwargs...)
 		while status(s)[1]==CameraControl.INITING; sleep(0.01); end
 		start(s)
+		while status(s)[1]==CameraControl.HALTED;  sleep(0.01); end
 		while status(s)[1]==CameraControl.RUNNING; sleep(0.01); end
-		while status(s)[1]!=CameraControl.HALTED; sleep(0.01); end
 		delete!(s)
 		pig.wave_clear()
 		# finalize(s)
