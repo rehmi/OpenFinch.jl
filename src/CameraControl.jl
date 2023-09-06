@@ -14,9 +14,11 @@ mutable struct PiGPIOScript
 		pptext = preprocess_script(text)
 		index = pyconvert(Int, pig.store_script(pptext))
 		function f(o)
-			stop(o)
-			delete!(o)
-			o.index = -1
+			try
+				stop(o)
+				delete!(o)
+			catch
+			end
 		end
 		finalizer(f, new(pig, index, pptext, text))
 	end
@@ -27,7 +29,11 @@ function Base.show(io::IO, ::MIME"text/plain", scr::PiGPIOScript)
 end
 
 function Base.delete!(scr::PiGPIOScript)
-	scr.pig.delete_script(scr.index)
+	try
+		scr.pig.delete_script(scr.index)
+	catch
+	end
+	scr.index = -1
 end
 
 function start(scr::PiGPIOScript, args...)
@@ -35,7 +41,10 @@ function start(scr::PiGPIOScript, args...)
 end
 
 function stop(scr::PiGPIOScript)
-	scr.pig.stop_script(scr.index)
+	try
+		scr.pig.stop_script(scr.index)
+	catch
+	end
 end
 
 Base.run(scr::PiGPIOScript, args...) = start(scr, args)
@@ -92,8 +101,13 @@ export scriptStatus, scriptHalted, scriptIniting, scriptRunning
 
 function scriptStatus(s::Int)
 	e, p = pig[].script_status(s)
-	p = Int64.(reinterpret(UInt32, Int32.(collect(pyconvert(Tuple, p)))))
-	e = ScriptStatus(pyconvert(Int, e))
+	e = pyconvert(Int, e)
+	if e >= 0
+		e = ScriptStatus(e)
+		p = Int64.(reinterpret(UInt32, Int32.(collect(pyconvert(Tuple, p)))))
+	else
+		p = nothing
+	end
 	return e, p
 end
 
@@ -148,18 +162,17 @@ end
 export trigger_wave_script
 function trigger_wave_script(pig;
 	TRIG_IN = 25,
-	TRIG_DELAY = 10,
+	TRIG_TIME = 0,
 	TRIG_OUT = 5,
 	TRIG_WIDTH = 50,
 	LED_IN = 22,
-	LED_DELAY = 5555,
+	LED_TIME = 5555,
 	LED_OUT = 17,	
-	LED_WIDTH = 800,
+	LED_WIDTH = 250,
 	STROBE_IN = 6,
-	INTERFRAME_DELAY = 16_000,
+	WAVE_DURATION = 10_000,
 	G1 = 23,
 	G2 = 27
-
 )
 	p = pigpio[]
 	
@@ -170,44 +183,49 @@ function trigger_wave_script(pig;
 		pig.set_mode(pin, p.INPUT)
 	end
 
+	dtled = max(0, LED_TIME - TRIG_WIDTH - TRIG_TIME)
+	dtif = max(0, WAVE_DURATION - LED_TIME - LED_WIDTH - TRIG_TIME - TRIG_WIDTH)
+
 	wave = @py []
-	wave.append(p.pulse(1<<G1, 0, TRIG_DELAY))
+	wave.append(p.pulse(0, 0, TRIG_TIME))
 	wave.append(p.pulse(0, 1<<TRIG_OUT, TRIG_WIDTH))
-	wave.append(p.pulse(1<<TRIG_OUT, 0, LED_DELAY))
+	wave.append(p.pulse(1<<TRIG_OUT, 0, dtled))
 	wave.append(p.pulse(0, 1<<LED_OUT, LED_WIDTH))
-	wave.append(p.pulse(1<<LED_OUT, 1<<G1, INTERFRAME_DELAY))
+	wave.append(p.pulse(1<<LED_OUT, 0, dtif))
 	pig.wave_add_generic(wave)
 	wave_id = pyconvert(Int, pig.wave_create())
 
 	script = PiGPIOScript(pig, """
-	pads 0 16
+	pads 0 16					# set pad drivers to 16 mA
 tag 100
-
-tag 101	r $TRIG_IN	jz 101
-tag 102	r $TRIG_IN	jnz 102
-
-	wvtx $wave_id
-
-	mils 35
-
-#	w $G2 1
-#	lda $STROBE_IN	call 501	w $G2 0
-#	lda $STROBE_IN	call 510	w $G2 1
-#	lda $STROBE_IN	call 501	w $G2 0
-#	lda $STROBE_IN	call 510	w $G2 1
-#	mils 16
-#	w $G2 0
-	
-	jmp 100
-
-# tag 103
-# 	wvbsy
-# 	jnz 103
-# 	jmp 100
-
+	w $G1 1
+tag 101	r $TRIG_IN	jz 101		# wait for TRIG_IN to go high
+tag 102	r $TRIG_IN	jnz 102		# wait for falling edge on TRIG_IN
+	w $G1 0
+	wvtx $wave_id 				# trigger the wave created above
+	w $G2 1
+tag 103	wvbsy	jnz 103 		# wait for wave to finish
+	w $G2 0
+	# wvdel $wave_id 				# release the wave resources
+	ret
 	"""
     )
 end
+
+function trigger_loop(pig; n=100, t_min=1200, t_max=1200+8333, kwargs...)
+	c = Int(floor((t_max-t_min)/n))
+	for i = 0:n
+		s = CameraControl.trigger_wave_script(pig; LED_TIME=t_min+i*c, kwargs...)
+		while status(s)[1]==CameraControl.INITING; sleep(0.01); end
+		start(s)
+		while status(s)[1]==CameraControl.RUNNING; sleep(0.01); end
+		while status(s)[1]!=CameraControl.HALTED; sleep(0.01); end
+		delete!(s)
+		pig.wave_clear()
+		# finalize(s)
+	end
+end
+export trigger_loop
 
 function trigger_script(;
 	TRIG_IN = 25,
