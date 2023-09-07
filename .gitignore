@@ -3,3 +3,6 @@
 misc/
 .vscode/
 .DS_Store
+*.vcd
+*.pyc
+__pycache__/
