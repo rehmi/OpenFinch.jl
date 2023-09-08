@@ -1,8 +1,10 @@
-/Manifest.toml
-/.CondaPkg
+Manifest.toml
+.CondaPkg/
 misc/
 .vscode/
 .DS_Store
 *.vcd
 *.pyc
 __pycache__/
+*.log
+*.code-workspace

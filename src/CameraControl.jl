@@ -211,7 +211,7 @@ tag 103	wvbsy	jnz 103 				# wait for wave to finish
 end
 
 function trigger_loop(pig; n=100, t_min=1200, t_max=1200+8333, kwargs...)
-	c = Int(floor((t_max-t_min)/n))
+	c = (t_max-t_min) ÷ n
 	time = @elapsed for i = 0:n
 		s = trigger_wave_script(pig; LED_TIME=t_min+i*c, kwargs...)
 		while status(s)==INITING; end
