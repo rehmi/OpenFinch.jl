@@ -21,6 +21,8 @@ using Observables, Markdown
 
 JSServe.browser_display()
 
+##
+
 function make_slider(T::Type{Integer}; max=0, min=0, step=0, default=0, value=0, kw...)
 	Slider(min:step:max, value=value)
 end
@@ -29,7 +31,7 @@ function make_checkbox(;value=0, default=0)
 	JSServe.Checkbox(value!=0)
 end
 
-img = Observable(rotr90(Gray.(rand(1600,1200))))
+img = Observable(Gray.(rand(1600,1200)))
 
 capture_button = Button("capture frame")
 continuous_capture = make_checkbox()
@@ -111,13 +113,13 @@ handlers = [
 	end
 
 	on(laser1) do val
-		pig.write(21, val ? 0 : 1)
+		pig.write(17, val ? 0 : 1)
 	end
 ]
 
 cap_handler = on(capture_button) do click
     # img[] = rand(Gray, 1600, 1200)
-    img[] = rotr90(capture_frame(vc))
+    img[] = capture_frame(vc)
     @async begin
         yield()
         if continuous_capture[]
@@ -128,8 +130,8 @@ end
 
 ##
 
-if false
-    rpi = RemotePython(finch.local)
+if true
+    rpi = RemotePython("finch.local")
     pygpio = rpi.modules.pigpio
     cv2 = rpi.modules.cv2
     v4l2py = rpi.modules.v4l2py
@@ -168,6 +170,7 @@ function capture_frame(vc)
     if pyconvert(Bool, fmt.pixel_format == PixelFormat.MJPEG)
         # img = reverse(Gray.(capture_raw(vc) |> IOBuffer |> load), dims=(1,))
 		img = reverse(JpegTurbo.jpeg_decode(Gray, capture_raw(vc)), dims=(1,))
+		rotl90(img)
     else
         a = reshape(capture_raw(vc), (2, height, width))
         rotl90(Gray.(a[1, :, :] / 255))
