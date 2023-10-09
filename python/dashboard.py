@@ -17,21 +17,33 @@ def get_image_data():
 	gamma = float(request.args.get('gamma', 1.0))
 	contrast = float(request.args.get('contrast', 1.0))
 
-	# Simulating image data capture
-	image_size = (1200, 1600)
-	image_array = np.random.randint(0, 256, image_size + (3,), dtype=np.uint8)
-	img = Image.fromarray(image_array, 'RGB')
+	# # Simulating image data capture
+	# image_size = (1200, 1600)
+	# image_array = np.random.randint(0, 256, image_size + (3,), dtype=np.uint8)
+	# img = Image.fromarray(image_array, 'RGB')
 
+	# # Simulating image data capture
+	image_size = (24, 32)
+	image_array = np.random.random(image_size)
+	img = Image.fromarray((255*image_array).astype(np.uint8), 'L')
+
+	# # Simulating image data capture
+	# image_size = (1200, 1600)
+	# # Generate a random array of values from 0.0 to 1.0
+	# image_array = float(np.random.random(image_size))
+	# # Convert the array to a monochrome (grayscale) image
+	# img = Image.fromarray(image_array, 'F')
+	
 	# Adjust brightness
 	enhancer = ImageEnhance.Brightness(img)
-	img = enhancer.enhance(brightness / 128.0)
+	# img = enhancer.enhance(brightness / 128.0)
 
 	# Adjust gamma
-	img = img.point(lambda p: p ** (1.0 / gamma))
+	# img = img.point(lambda p: p ** (1.0 / gamma))
 
 	# Adjust contrast
 	enhancer = ImageEnhance.Contrast(img)
-	img = enhancer.enhance(contrast / 128.0)
+	# img = enhancer.enhance(contrast / 128.0)
 
 	saturation = float(request.args.get('saturation', 1.0))
 	hue = float(request.args.get('hue', 1.0))
@@ -51,7 +63,7 @@ def get_image_data():
 
 	# Convert to base64
 	buffered = io.BytesIO()
-	img.save(buffered, format="PNG")
+	img.save(buffered, format="JPEG")
 	img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
 	data = {
@@ -63,4 +75,4 @@ def get_image_data():
 	return jsonify(data)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8000, debug=True)

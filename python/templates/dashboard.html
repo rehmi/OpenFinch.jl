@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 
+<!DOCTYPE html>
+<html lang="en">
+
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,17 +15,22 @@
 			align-items: center;
 		}
 
-		table {
-			margin-top: 5px;
-			/* Reduce the top margin to reduce the space above the table */
-			margin-bottom: 5px;
-			/* Add a bottom margin to reduce the space below the table */
-		}
-		#capturedImage {
-			width: 80%;
-			/* Set the width to some percentage of the parent element */
-			height: auto;
-			/* Set the height to auto to maintain aspect ratio */
+		@media (min-width: 500px) {
+			body {
+				flex-direction: column;
+			}
+
+			.slidersTable {
+				min-width: 100%;
+			}
+
+			#capturedImage {
+				width: 80%;
+				/* Set the width to some percentage of the parent element */
+				height: auto;
+				/* Set the height to auto to maintain aspect ratio */
+				min-width: 350px;
+			}
 		}
 	</style>
 </head>
@@ -34,7 +42,7 @@
 			<td><img id="capturedImage" alt="Captured image will be displayed here"></td>
 			<td>
 				<!-- Sliders -->
-				<table>
+				<table class="slidersTable">
 					<td>
 						<table>
 							<tr>
