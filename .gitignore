@@ -8,3 +8,5 @@ misc/
 __pycache__/
 *.log
 *.code-workspace
+fragments/
+tailwind/
