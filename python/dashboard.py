@@ -3,6 +3,11 @@ from flask import Flask, render_template, jsonify, request
 import numpy as np
 import io
 import base64
+import atexit
+from capdisp import ImageCapture
+
+image_capture = ImageCapture(capture_raw=False)
+image_capture.open()
 
 app = Flask(__name__)
 
@@ -11,35 +16,20 @@ def index():
     return render_template('dashboard.html')
 
 @app.route('/get-image-data', methods=['GET'])
-
 def get_image_data():
 	brightness = float(request.args.get('brightness', 1.0))
 	gamma = float(request.args.get('gamma', 1.0))
 	contrast = float(request.args.get('contrast', 1.0))
 
-	# # Simulating image data capture
-	# image_size = (1200, 1600)
-	# image_array = np.random.randint(0, 256, image_size + (3,), dtype=np.uint8)
-	# img = Image.fromarray(image_array, 'RGB')
+	image_array = image_capture.capture_frame()
+	img = Image.fromarray(image_array, 'RGB')
 
-	# # Simulating image data capture
-	image_size = (24, 32)
-	image_array = np.random.random(image_size)
-	img = Image.fromarray((255*image_array).astype(np.uint8), 'L')
-
-	# # Simulating image data capture
-	# image_size = (1200, 1600)
-	# # Generate a random array of values from 0.0 to 1.0
-	# image_array = float(np.random.random(image_size))
-	# # Convert the array to a monochrome (grayscale) image
-	# img = Image.fromarray(image_array, 'F')
-	
 	# Adjust brightness
 	enhancer = ImageEnhance.Brightness(img)
-	# img = enhancer.enhance(brightness / 128.0)
+	img = enhancer.enhance(brightness / 128.0)
 
 	# Adjust gamma
-	# img = img.point(lambda p: p ** (1.0 / gamma))
+	img = img.point(lambda p: p ** (1.0 / gamma))
 
 	# Adjust contrast
 	enhancer = ImageEnhance.Contrast(img)
@@ -63,11 +53,11 @@ def get_image_data():
 
 	# Convert to base64
 	buffered = io.BytesIO()
-	img.save(buffered, format="JPEG")
+	img.convert('L').save(buffered, format="JPEG")
 	img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
 	data = {
-		'pixel_count': image_size[0] * image_size[1],
+		'pixel_count': img.size[0] * img.size[1],
 		'average_brightness': np.mean(image_array),
 		'timestamp': np.random.randint(1609459200, 1672531199),  # Random timestamp between 2021 and 2023
 		'image_base64': img_base64
@@ -75,4 +65,4 @@ def get_image_data():
 	return jsonify(data)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    app.run(host="0.0.0.0", port=8000, debug=False)
