@@ -33,7 +33,7 @@ def get_image_data():
 
 	# Adjust contrast
 	enhancer = ImageEnhance.Contrast(img)
-	# img = enhancer.enhance(contrast / 128.0)
+	img = enhancer.enhance(contrast / 128.0)
 
 	saturation = float(request.args.get('saturation', 1.0))
 	hue = float(request.args.get('hue', 1.0))

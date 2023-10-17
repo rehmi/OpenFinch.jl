@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Controls</title>
+</head>
+<body>
+    <form method="POST">
+		<img id="captured_image" src="{{ captured_image }}" alt="Captured Image">
+        {{ form.hidden_tag() }}
+        <label for="brightness">Brightness: {{ form.brightness.data }}</label>
+        <input type="range" id="brightness" name="brightness" min="0" max="100" value="{{ form.brightness.data }}">
+        <br>
+        <label for="contrast">Contrast: {{ form.contrast.data }}</label>
+        <input type="range" id="contrast" name="contrast" min="0" max="100" value="{{ form.contrast.data }}">
+        <br>
+        <label for="saturation">Saturation: {{ form.saturation.data }}</label>
+        <input type="range" id="saturation" name="saturation" min="0" max="100" value="{{ form.saturation.data }}">
+        <br>
+        <label for="gamma">Gamma: {{ form.gamma.data }}</label>
+        <input type="range" id="gamma" name="gamma" min="0" max="100" value="{{ form.gamma.data }}">
+        <br>
+        <label for="gain">Gain: {{ form.gain.data }}</label>
+        <input type="range" id="gain" name="gain" min="0" max="100" value="{{ form.gain.data }}">
+        <br>
+        <label for="sharpness">Sharpness: {{ form.sharpness.data }}</label>
+        <input type="range" id="sharpness" name="sharpness" min="0" max="100" value="{{ form.sharpness.data }}">
+        <br>
+        <label for="exposure_absolute">Exposure Absolute: {{ form.exposure_absolute.data }}</label>
+        <input type="range" id="exposure_absolute" name="exposure_absolute" min="0" max="100" value="{{ form.exposure_absolute.data }}">
+        <br>
+        <label for="exposure_auto">Exposure Auto: {{ form.exposure_auto.data }}</label>
+        <input type="range" id="exposure_auto" name="exposure_auto" min="0" max="100" value="{{ form.exposure_auto.data }}">
+        <br>
+        <label for="power_line_frequency">Power Line Frequency: {{ form.power_line_frequency.data }}</label>
+        <input type="range" id="power_line_frequency" name="power_line_frequency" min="0" max="100" value="{{ form.power_line_frequency.data }}">
+        <br>
+        {{ form.continuous_capture.label }} {{ form.continuous_capture }}
+        <br>
+        {{ form.white_balance_temperature_auto.label }} {{ form.white_balance_temperature_auto }}
+        <br>
+        {{ form.exposure_auto_priority.label }} {{ form.exposure_auto_priority }}
+        <br>
+        {{ form.laser1.label }} {{ form.laser1 }}
+        <br>
+        {{ form.laser2.label }} {{ form.laser2 }}
+        <br>
+        {{ form.laser3.label }} {{ form.laser3 }}
+        <br>
+        {{ form.capture_frame }}
+    </form>
+</body>
+</html>

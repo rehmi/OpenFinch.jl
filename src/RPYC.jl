@@ -47,7 +47,6 @@ end
 
 abstract type RemotePython end
 
-RemotePython(host::AbstractString, user::AbstractString=""; kwargs...) = RPYCClassic(host, user; kwargs...)
 struct RPYCClassic <: RemotePython
 	host
 	mach
@@ -71,6 +70,8 @@ struct RPYCClassic <: RemotePython
 		return self
 	end
 end
+
+RemotePython(host::AbstractString, user::AbstractString=""; kwargs...) = RPYCClassic(host, user; kwargs...)
 
 function Base.show(io::IO, r::RPYCClassic)
 	print(io, "RPYCClassic(host=$(r.host), pid=$(r.pid), version=$(r.version))")
