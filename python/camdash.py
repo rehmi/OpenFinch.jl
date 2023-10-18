@@ -12,13 +12,19 @@ import rpyc
 import io
 from RPYC import RemotePython, RPYCClassic
 
+from flask import Flask, request, render_template
+from flask_wtf import FlaskForm
+from flask import jsonify
+from flask import session
+from wtforms import SubmitField, BooleanField, IntegerField
+from wtforms.validators import DataRequired
 from capdisp import ImageCapture
 
 image_capture = ImageCapture(capture_raw=False)
 image_capture.open()
 
 OV2311_defaults = {
-	"brightness": 0,
+	"brightness": 50,
 	"contrast": 32,
 	"saturation": 64,
 	"hue": 1,
@@ -32,13 +38,6 @@ OV2311_defaults = {
 	"exposure_auto_priority": 0,
 	# "white_balance_temperature": 4600
 }
-
-# The user's code is already a Flask-Based interactive interface using jupyter widgets (IPython). However, if they want to replace it with a traditional Flask (Web-Based) framework, here is a simple reference:
-
-from flask import Flask, request, render_template
-from flask_wtf import FlaskForm
-from wtforms import SubmitField, BooleanField, IntegerField
-from wtforms.validators import DataRequired
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '9a1db2409162b580b1f7b4895e37e2bb'
@@ -63,13 +62,13 @@ class CameraControls(FlaskForm):
 
 @app.route("/", methods=['GET', 'POST'])
 def home():
-	print("entering home()")
-	form = CameraControls()
 	captured_image = False
-	
+
+	form = CameraControls()
+
 	if form.validate_on_submit():
-		print("Capturing image...")
-  
+		session['continuous_capture'] = form.continuous_capture.data
+
 		image_array = image_capture.capture_frame()
 		img = PILImage.fromarray(image_array, 'RGB')
 
@@ -79,14 +78,25 @@ def home():
 		data64 = base64.b64encode(data.getvalue())
 		captured_image = "data:image/jpeg;base64," + data64.decode('utf-8')
 
-		return render_template('camdash.html', form=form, captured_image=captured_image)
-	else:
-		return render_template('camdash.html', form=form)
+	form.continuous_capture.data = session.get('continuous_capture', False)
+	return render_template('camdash.html', form=form, captured_image=captured_image)
+
+@app.route("/capture", methods=['POST'])
+def capture():
+	image_array = image_capture.capture_frame()
+	img = PILImage.fromarray(image_array, 'RGB')
+
+	# Convert image to data URL
+	data = io.BytesIO()
+	img.save(data, "JPEG")
+	data64 = base64.b64encode(data.getvalue())
+	captured_image = "data:image/jpeg;base64," + data64.decode('utf-8')
+
+	return jsonify({'captured_image': captured_image})
 
 if __name__ == "__main__":
-	app.run(debug=False)
+	app_ctx = app.app_context()
+	app_ctx.push()
 
-# The above Flask app creates a form using the Flask-WTF library with fields corresponding to your code's controls.
-# Each field corresponds to a user input control you had with similar names. The home route renders this form on a simple HTML template (referenced as 'home.html').
-# If the form is valid after submission, the respective control's value should be updated accordingly.
-# Please consider that you should write a separate HTML file ('home.html') to render the front end of your application.
+	app.run(debug=False)
+	app_ctx.pop()

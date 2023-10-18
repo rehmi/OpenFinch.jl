@@ -1,11 +1,53 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/main.css') }}">
     <title>Camera Controls</title>
 </head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>
+	// $(document).ready(function () {
+	// 	$("#image").on('load', function () {
+	// 		if ($("#continuous_capture").is(':checked')) {
+	// 			$.post("/capture", function (data) {
+	// 				$("#image").attr("src", data.captured_image);
+	// 			});
+	// 		}
+	// 	});
+	// });
+
+	$(document).ready(function () {
+		$("#captured_image").on('load', function () {
+			if ($("#continuous_capture").is(':checked')) {
+				$.post("/capture", function (data) {
+					$("#captured_image").attr("src", data.captured_image);
+				});
+			}
+		});
+	});
+
+	window.onload = function () {
+		var continuousCapture = localStorage.getItem('continuousCapture');
+		if (continuousCapture !== null) {
+			document.getElementById('continuous_capture').checked = (continuousCapture === 'true');
+		}
+	}
+
+	document.getElementById('continuous_capture').onchange = function () {
+		localStorage.setItem('continuousCapture', this.checked);
+	}
+</script>
+
+<!-- <img id="image" src="{{ captured_image }}"> -->
 <body>
     <form method="POST">
-		<img id="captured_image" src="{{ captured_image }}" alt="Captured Image">
+		<img class="captured_image" id="captured_image" src="{{ captured_image }}" alt="Captured Image">
+		<br>
+		<!-- {{ form.continuous_capture.label }} <input type="checkbox" id="continuous_capture" {% if form.continuous_capture.data %}checked{% endif %}> {{ form.capture_frame }} -->
+		{{ form.continuous_capture.label }} {{ form.continuous_capture }} {{ form.capture_frame }}
+		<br>
         {{ form.hidden_tag() }}
         <label for="brightness">Brightness: {{ form.brightness.data }}</label>
         <input type="range" id="brightness" name="brightness" min="0" max="100" value="{{ form.brightness.data }}">
@@ -34,8 +76,6 @@
         <label for="power_line_frequency">Power Line Frequency: {{ form.power_line_frequency.data }}</label>
         <input type="range" id="power_line_frequency" name="power_line_frequency" min="0" max="100" value="{{ form.power_line_frequency.data }}">
         <br>
-        {{ form.continuous_capture.label }} {{ form.continuous_capture }}
-        <br>
         {{ form.white_balance_temperature_auto.label }} {{ form.white_balance_temperature_auto }}
         <br>
         {{ form.exposure_auto_priority.label }} {{ form.exposure_auto_priority }}
@@ -45,8 +85,6 @@
         {{ form.laser2.label }} {{ form.laser2 }}
         <br>
         {{ form.laser3.label }} {{ form.laser3 }}
-        <br>
-        {{ form.capture_frame }}
     </form>
 </body>
 </html>
