@@ -51,7 +51,7 @@ async def handle_message(websocket, path):
 		# Remove disconnected client
 		connected.remove(websocket)
 	
-start_server = websockets.serve(handle_message, "localhost", 8086)
+start_server = websockets.serve(handle_message, "localhost", 8001)
 
 class MyHandler(SimpleHTTPRequestHandler):
 	def end_headers(self):
@@ -64,7 +64,7 @@ class MyHandler(SimpleHTTPRequestHandler):
 		return SimpleHTTPRequestHandler.do_GET(self)
 
 def start_http_server():
-	os.chdir("templates")
+	# os.chdir("templates")
 	httpd = HTTPServer(('localhost', 8000), MyHandler)
 	httpd.serve_forever()
 

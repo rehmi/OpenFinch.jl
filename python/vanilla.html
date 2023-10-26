@@ -3,7 +3,7 @@
 
 <head>
 	<title>Image Viewer</title>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 	<style>
 		body {
 			background-color: var(--background);
@@ -33,7 +33,7 @@
 	</div>
 	<button id="submit">Submit</button>
 	<script>
-		var ws = new WebSocket('ws://' + 'localhost' + ':8086');
+		var ws = new WebSocket('ws://' + 'localhost' + ':8001');
 		var throttle = false;
 
 		ws.onmessage = function (event) {
