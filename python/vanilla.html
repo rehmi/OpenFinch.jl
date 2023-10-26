@@ -33,7 +33,7 @@
 	</div>
 	<button id="submit">Submit</button>
 	<script>
-		var ws = new WebSocket('ws://' + 'localhost' + ':8001');
+		var ws = new WebSocket('ws://' + 'localhost' + ':8000');
 		var throttle = false;
 
 		ws.onmessage = function (event) {
