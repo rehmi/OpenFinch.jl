@@ -16,6 +16,7 @@ from flask import Flask, request, render_template
 from flask_wtf import FlaskForm
 from flask import jsonify
 from flask import session
+from flask_socketio import SocketIO, emit
 from wtforms import SubmitField, BooleanField, IntegerField
 from wtforms.validators import DataRequired
 from capdisp import ImageCapture
@@ -41,6 +42,7 @@ OV2311_defaults = {
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '9a1db2409162b580b1f7b4895e37e2bb'
+socketio = SocketIO(app)
 
 class CameraControls(FlaskForm):
 	capture_frame = SubmitField('Capture Frame')
@@ -62,26 +64,13 @@ class CameraControls(FlaskForm):
 
 @app.route("/", methods=['GET', 'POST'])
 def home():
-	captured_image = False
-
 	form = CameraControls()
-
 	if form.validate_on_submit():
 		session['continuous_capture'] = form.continuous_capture.data
-
-		image_array = image_capture.capture_frame()
-		img = PILImage.fromarray(image_array, 'RGB')
-
-		# Convert image to data URL
-		data = io.BytesIO()
-		img.save(data, "JPEG")
-		data64 = base64.b64encode(data.getvalue())
-		captured_image = "data:image/jpeg;base64," + data64.decode('utf-8')
-
 	form.continuous_capture.data = session.get('continuous_capture', False)
-	return render_template('camdash.html', form=form, captured_image=captured_image)
+	return render_template('camdash.html', form=form)
 
-@app.route("/capture", methods=['POST'])
+@socketio.on('capture')
 def capture():
 	image_array = image_capture.capture_frame()
 	img = PILImage.fromarray(image_array, 'RGB')
@@ -92,11 +81,11 @@ def capture():
 	data64 = base64.b64encode(data.getvalue())
 	captured_image = "data:image/jpeg;base64," + data64.decode('utf-8')
 
-	return jsonify({'captured_image': captured_image})
+	emit('captured_image', {'captured_image': captured_image})
 
 if __name__ == "__main__":
 	app_ctx = app.app_context()
 	app_ctx.push()
 
-	app.run(debug=False)
+	socketio.run(app, debug=False)
 	app_ctx.pop()
