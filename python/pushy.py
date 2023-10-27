@@ -25,8 +25,6 @@ def generate_image(brightness, contrast, gamma, width=1600, height=1200):
 	img = enhancer.enhance(contrast)
 
 	# Convert the image to base64
-	buffered = BytesIO()
-	img.save(buffered, format="JPEG")
 	rawBytes = io.BytesIO()
 	img.save(rawBytes, "JPEG")
 	rawBytes.seek(0)

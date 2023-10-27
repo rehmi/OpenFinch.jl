@@ -40,7 +40,7 @@ end
 const use_jpeg = Ref(true)
 const quality = Ref(75)
 
-function send_image(ws=nothing; height=12, width=16, quality=quality[])
+function send_image(ws; height=12, width=16, quality=quality[])
     img = generate_image(brightness, contrast, gamma, height=height, width=width)
     img_bin = image_to_binary(img, quality=quality)
 
@@ -75,13 +75,13 @@ function start_server()
     return HTTP.listen!(Sockets.localhost, 8000; verbose=true) do http::HTTP.Streams.Stream
         req = http.message
 		# @info req
-        if HTTP.header(req, "Upgrade") == "websocket"
+        if req.target=="/ws" || HTTP.header(req, "Upgrade") == "websocket"
 			# @info "upgrading to websocket"
             WebSockets.upgrade(http) do ws
 				try
 					push!(connected, ws)
 					for msg in ws
-						@info "got message $msg"
+						# @info "got message $msg"
 						handle_message(ws, msg)
 					end
 				finally

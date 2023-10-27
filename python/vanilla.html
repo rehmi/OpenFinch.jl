@@ -6,8 +6,15 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 	<style>
 		body {
-			background-color: var(--background);
-			color: var(--text-color);
+			background-color: lightsteelblue;
+			color: hsl(0, 0%, 10%);
+		}
+
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #0f1010;
+				color: lightblue;
+			}
 		}
 
 		img {
@@ -34,7 +41,7 @@
 	</div>
 	<button id="submit">Submit</button>
 	<script>
-		var ws = new WebSocket('ws://' + 'localhost' + ':8000');
+		var ws = new WebSocket('ws://' + 'localhost' + ':8000' + '/ws');
 		ws.binaryType = 'blob'; // Set the binaryType to 'blob'
 		var throttle = false;
 		var nextIsImage = false;
@@ -54,17 +61,19 @@
 		};
 
 		$('#submit').on('click', function () {
-			ws.send(JSON.stringify({
-				'image_request': {
-					'brightness': $('#brightness').val(),
-					'contrast': $('#contrast').val(),
-					'gamma': $('#gamma').val()
-				}
-			}));
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'image_request': {
+						'brightness': $('#brightness').val(),
+						'contrast': $('#contrast').val(),
+						'gamma': $('#gamma').val()
+					}
+				}));
+			}
 		});
 
 		$('input[type=range]').on('input', function () {
-			if (!throttle) {
+			if (!throttle && ws.readyState==WebSocket.OPEN) {
 				ws.send(JSON.stringify({
 					'control_change': {
 						[this.id]: $(this).val()
@@ -72,6 +81,10 @@
 				}));
 				throttle = true;
 			}
+		});
+
+		$(document).ready(function () {
+			$('#submit').click();
 		});
 	</script>
 </body>
