@@ -9,6 +9,7 @@
 			background-color: var(--background);
 			color: var(--text-color);
 		}
+
 		img {
 			width: 80%;
 			height: auto;
@@ -34,13 +35,21 @@
 	<button id="submit">Submit</button>
 	<script>
 		var ws = new WebSocket('ws://' + 'localhost' + ':8000');
+		ws.binaryType = 'blob'; // Set the binaryType to 'blob'
 		var throttle = false;
+		var nextIsImage = false;
 
 		ws.onmessage = function (event) {
-			var data = JSON.parse(event.data);
-			if ('image_response' in data) {
-				document.getElementById('image').src = data.image_response.image;
+			if (nextIsImage && event.data instanceof Blob) {
+				var url = URL.createObjectURL(event.data);
+				document.getElementById('image').src = url;
 				throttle = false;
+				nextIsImage = false;
+			} else {
+				var data = JSON.parse(event.data);
+				if (data.image_response && data.image_response.image === 'next') {
+					nextIsImage = true;
+				}
 			}
 		};
 
