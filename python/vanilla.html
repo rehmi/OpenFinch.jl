@@ -46,6 +46,10 @@
 		var throttle = false;
 		var nextIsImage = false;
 
+		ws.onopen = function (event) {
+			$('#submit').click();
+		};
+
 		ws.onmessage = function (event) {
 			if (nextIsImage && event.data instanceof Blob) {
 				var url = URL.createObjectURL(event.data);
@@ -61,7 +65,9 @@
 		};
 
 		$('#submit').on('click', function () {
-			if (ws.readyState == WebSocket.OPEN) {
+			if (ws.readyState != WebSocket.OPEN) {
+				console.log('Websocket is not open');
+			} else {
 				ws.send(JSON.stringify({
 					'image_request': {
 						'brightness': $('#brightness').val(),
@@ -83,9 +89,13 @@
 			}
 		});
 
-		$(document).ready(function () {
-			$('#submit').click();
-		});
+		// $(document).ready(function () {
+		// 	$('#submit').click();
+		// });
+
+		// window.onload = function () {
+		// 	$('#submit').click();
+		// };
 	</script>
 </body>
 

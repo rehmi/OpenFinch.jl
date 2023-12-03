@@ -72,7 +72,7 @@ function handle_message(ws::WebSockets.WebSocket, data::String)
 end
 
 function start_server()
-    return HTTP.listen!(Sockets.localhost, 8000; verbose=true) do http::HTTP.Streams.Stream
+    return HTTP.listen!(ip"0.0.0.0", 8000; verbose=true) do http::HTTP.Streams.Stream
         req = http.message
 		# @info req
         if req.target=="/ws" || HTTP.header(req, "Upgrade") == "websocket"
