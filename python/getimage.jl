@@ -24,3 +24,16 @@ HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
 		end
 	end for i in 1:100 ]
 end
+
+using BenchmarkTools
+
+@benchmark HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
+    req = JSON.json(Dict("image_request" => Dict(
+        "brightness" => "1.0", "contrast" => "1.0", "gamma" => "1.0"
+    )))
+    send(ws, req)
+    msg = JSON.parse(receive(ws))
+    if haskey(msg, "image_response")
+        img_bin = receive(ws)
+    end
+end

@@ -1,3 +1,6 @@
+include("camera.jl")
+using .CameraModule
+
 using OpenFinch
 using PythonCall
 using Images, ImageShow, Colors
@@ -128,64 +131,11 @@ cap_handler = on(capture_button) do click
     end
 end
 
-##
-
-if true
-    rpi = RemotePython("finch.local")
-    pygpio = rpi.modules.pigpio
-    cv2 = rpi.modules.cv2
-    v4l2py = rpi.modules.v4l2py
-    Device = v4l2py.Device
-    VideoCapture = v4l2py.device.VideoCapture
-    BufferType = v4l2py.device.BufferType
-    PixelFormat = v4l2py.PixelFormat
-else
-    rpi = nothing
-    pygpio = pyimport("pigpio")
-    cv2 = pyimport("cv2")
-    v4l2py = pyimport("v4l2py")
-    Device = v4l2py.Device
-    VideoCapture = v4l2py.device.VideoCapture
-    BufferType = v4l2py.device.BufferType
-    PixelFormat = v4l2py.PixelFormat
-end
-
-import JpegTurbo
-function JpegTurbo._jpeg_check_bytes(data::Vector{UInt8})
-    length(data) > 623 || throw(ArgumentError("Invalid number of bytes."))
-    data[1:2] == [0xff, 0xd8] || throw(ArgumentError("Invalid JPEG byte sequence."))
-    # data[end-1:end] == [0xff, 0xd9] || @warn "Premature end of JPEG byte sequence."
-    return true
-end
-
-function capture_raw(vc)
-    it = @py iter(vc)
-    frame = @py next(it)
-    return pyconvert(Array, frame.array)
-end
-
-function capture_frame(vc)
-    fmt = vc.get_format()
-    width, height = fmt.width, fmt.height
-    if pyconvert(Bool, fmt.pixel_format == PixelFormat.MJPEG)
-        # img = reverse(Gray.(capture_raw(vc) |> IOBuffer |> load), dims=(1,))
-		img = reverse(JpegTurbo.jpeg_decode(Gray, capture_raw(vc)), dims=(1,))
-		rotl90(img)
-    else
-        a = reshape(capture_raw(vc), (2, height, width))
-        rotl90(Gray.(a[1, :, :] / 255))
-    end
-end
 
 ##
 
-pig = pygpio.pi()
-dev = Device.from_id(0)
-dev.open()
-vc = VideoCapture(dev)
-# vc.set_format(1600, 1200, "YUYV")
-vc.set_format(1600, 1200, "MJPG")
-vc.open()
+init_camera()
+set_defaults()
 
 ##
 
