@@ -139,22 +139,24 @@ def trigger_wave_script(pig, **kwargs):
 	lda {STROBE_IN} sta p2
 
 tag 100
+	br1 sta p4								# capture starting GPIO in p4
 	tick sta p5								# capture the start time in p5
-tag 101	mics 1	r p1		jz 101			# wait for trigger in p1 to go high
-	tick sta p6								# capture trigger high time in p6
-tag 102	mics 1 r p1			jnz 102			# wait for falling edge on p1
-	tick sta p7								# capture trigger low time in p7
-	br1 sta p4								# store GPIO state at trigger time in p4
-	wvtx p0									# trigger the wave
-# tag 104	mics 1	r p2	jz 104	# wait for STROBE_IN to go high
-# tag 105	mics 1	r p2	jnz 105	# wait for STROBE_IN to go low
-# tag 106	mics 1	r p2	jz 106	# wait for STROBE_IN to go high
-# tag 107	mics 1	r p2	jnz 107	# wait for STROBE_IN to go low
-	tick sub p7 sta p8						# capture strobe wait Δt in p8
-tag 103	wvbsy	jnz 103 					# wait for wave to finish
-	tick sub p7 sta p9						# capture wave finish Δt in p9
-	# wvdel p0		 						# release the wave resources
 
+tag 101	mics 1	r p1		jz 101			# wait for p1 to go high
+
+	tick sta p6								# capture trigger high time in p6
+
+tag 102	mics 1 r p1			jnz 102			# wait for falling edge on p1
+
+	br1 sta p7								# capture GPIO at trigger low in p7
+	tick sta p8								# capture trigger low time in p8
+
+	wvtx p0									# trigger the wave
+tag 103	wvbsy	jnz 103 					# wait for wave to finish
+	tick sta p9								# capture wave finish time in p9
+
+	# wvdel p0		 						# release the wave resources
+	# jmp 100
 	ret
 	"""
 	return PiGPIOScript(pig, script)
@@ -162,11 +164,18 @@ tag 103	wvbsy	jnz 103 					# wait for wave to finish
 import time
 
 def print_summary(params):
-    start_rel_to_lo = params[5] - params[7]
-    trighi_rel_to_lo = params[5] - params[7]
-    gpio_binary = f"{params[4]:032b}"
-    summary = f"GPIO:{gpio_binary} Start:{start_rel_to_lo} TrigHI:{trighi_rel_to_lo}, TrigLO:0 Strobe:{params[8]} Finish:{params[9]}"
-    print(summary)
+	start_gpio = f"{params[4]:08x}"
+	start_to_hi = params[6] - params[5]
+	triglo_gpio = f"{params[7]:08x}"
+	hi_to_lo = params[8] - params[6]
+	lo_to_finish = params[9] - params[8]
+	
+	if 0 < hi_to_lo < 16667:
+		summary = f"{start_gpio} {start_to_hi:5d} TrigHI {hi_to_lo:5d} {triglo_gpio} {lo_to_finish:5d} Finish"
+	else:
+		summary = "xxxxxxxx"
+
+	print(summary)
 
 def trigger_loop(pig, n=1000, t_min=2777, t_max=2778+8333, **kwargs):
 	c = int((t_max - t_min) // n)
@@ -203,3 +212,25 @@ def trigger_loop(pig, n=1000, t_min=2777, t_max=2778+8333, **kwargs):
 if __name__ == "__main__":
    pig = start_pig()
    trigger_loop(pig)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

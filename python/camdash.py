@@ -87,5 +87,5 @@ if __name__ == "__main__":
 	app_ctx = app.app_context()
 	app_ctx.push()
 
-	socketio.run(app, debug=False)
+	socketio.run(app, host="0.0.0.0", port="8000", debug=False)
 	app_ctx.pop()
