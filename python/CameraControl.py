@@ -163,6 +163,10 @@ tag 103	wvbsy	jnz 103 					# wait for wave to finish
 
 import time
 
+def params_valid(params):
+	hi_to_lo = params[8] - params[6]
+	return (0 < hi_to_lo < 8340)
+
 def print_summary(params):
 	start_gpio = f"{params[4]:08x}"
 	start_to_hi = params[6] - params[5]
@@ -170,7 +174,7 @@ def print_summary(params):
 	hi_to_lo = params[8] - params[6]
 	lo_to_finish = params[9] - params[8]
 	
-	if 0 < hi_to_lo < 16667:
+	if params_valid(params):
 		summary = f"{start_gpio} {start_to_hi:5d} TrigHI {hi_to_lo:5d} {triglo_gpio} {lo_to_finish:5d} Finish"
 	else:
 		summary = "xxxxxxxx"
@@ -205,32 +209,13 @@ def trigger_loop(pig, n=1000, t_min=2777, t_max=2778+8333, **kwargs):
 	# Calculate the elapsed time
 	elapsed_time = end_time - start_time
 	
-	return f"{n/elapsed_time} fps"
+	print(f"{n/elapsed_time} fps")
+	
+	return fps
 
 
 
 if __name__ == "__main__":
    pig = start_pig()
    trigger_loop(pig)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
