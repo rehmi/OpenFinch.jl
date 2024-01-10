@@ -1,10 +1,9 @@
 import time
 from ImageCapture import ImageCapture
 from Display import Display
-from CameraControl import start_pig, trigger_wave_script, print_summary, params_valid
+from CameraControl import start_pig, trigger_wave_script
 
-if __name__ == "__main__":
-
+def main():
 	pig = start_pig()
 	
 	vidcap = ImageCapture(capture_raw=False)
@@ -47,14 +46,14 @@ if __name__ == "__main__":
 	vidcap.control_set("white_balance_temperature" 	,	4600)
 
 	# time.sleep(2)
- 
+
 	display = Display()
 
 	frame_count = 0
 	start_time = time.time()
 
 	# trigger_loop(pig)
- 
+
 	n=100
 	t_min = 0 # 2777
 	t_max = 8333 # + 2778
@@ -66,18 +65,18 @@ if __name__ == "__main__":
 	RED_OUT = 17
 	GRN_OUT = 27
 	BLU_OUT = 23
- 
+
 	skip = 0
- 
+
 	vidcap.control_set("exposure_auto_priority", 1)
 
 	while True:
 		for i in range(n + 1):
-			while True:
-				LED_TIME = t_min + c*i
-				LED_MASK = 1<<RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
-				s = trigger_wave_script(pig, LED_TIME=LED_TIME, LED_WIDTH=LED_WIDTH, LED_MASK=LED_MASK, WAVE_DURATION=0)
+			LED_TIME = t_min + c*i
+			LED_MASK = 1<<RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
+			s = trigger_wave_script(pig, LED_TIME=LED_TIME, LED_WIDTH=LED_WIDTH, LED_MASK=LED_MASK, WAVE_DURATION=0)
 			
+			while True:
 				while s.initing():
 					pass
 				
@@ -86,16 +85,17 @@ if __name__ == "__main__":
 				while s.running():
 					pass
 			
-				p = s.params()
-				print_summary(p)
+				# p = s.params()
+				logging.info(s.param_summary())
 
-				s.delete()
-				pig.wave_clear()
-	
-				if params_valid(p):
+				if s.params_valid():
 					break
 				
 				# skip |= 4
+
+			s.delete()
+			pig.wave_clear()
+	
 
 			try:
 				img = vidcap.capture_frame()
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
 				if time.time() - start_time >= 5:
 					fps = frame_count / (time.time() - start_time)
-					print(f"Average FPS: {fps:.2f}")
+					logging.info(f"Average FPS: {fps:.2f}")
 					frame_count = 0
 					start_time = time.time()
 
@@ -119,4 +119,13 @@ if __name__ == "__main__":
 
 	display.close()
 	vidcap.close()
- 
+
+
+import logging
+if __name__ == "__main__":
+	try:
+		fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
+		logging.basicConfig(level="INFO", format=fmt)
+		main()
+	except KeyboardInterrupt:
+		logging.info("Ctrl-C pressed. Bailing out")

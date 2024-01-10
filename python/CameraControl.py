@@ -72,6 +72,22 @@ class PiGPIOScript:
 		_, p = self.pig.script_status(self.index)
 		return p
 
+	def params_valid(self):
+		params = self.params()
+		hi_to_lo = params[8] - params[6]
+		return (0 < hi_to_lo < 8340)
+
+	def param_summary(self):
+		params = self.params()
+		start_gpio = f"{params[4]:08x}"
+		start_to_hi = params[6] - params[5]
+		triglo_gpio = f"{params[7]:08x}"
+		hi_to_lo = params[8] - params[6]
+		lo_to_finish = params[9] - params[8]
+		
+		summary = f"{start_gpio} {start_to_hi:5d} TrigHI {hi_to_lo:5d} {triglo_gpio} {lo_to_finish:5d} Finish"
+		return summary
+
 	def halted(self):
 		return self.status() == ScriptStatus.HALTED
 
@@ -159,24 +175,6 @@ tag 103	wvbsy	jnz 103 					# wait for wave to finish
 	return PiGPIOScript(pig, script)
 
 import time
-
-def params_valid(params):
-	hi_to_lo = params[8] - params[6]
-	return (0 < hi_to_lo < 8340)
-
-def print_summary(params):
-	start_gpio = f"{params[4]:08x}"
-	start_to_hi = params[6] - params[5]
-	triglo_gpio = f"{params[7]:08x}"
-	hi_to_lo = params[8] - params[6]
-	lo_to_finish = params[9] - params[8]
-	
-	if params_valid(params):
-		summary = f"{start_gpio} {start_to_hi:5d} TrigHI {hi_to_lo:5d} {triglo_gpio} {lo_to_finish:5d} Finish"
-	else:
-		summary = "xxxxxxxx"
-
-	print(summary)
 
 def trigger_loop(pig, n=1000, t_min=2777, t_max=2778+8333, **kwargs):
 	c = int((t_max - t_min) // n)
