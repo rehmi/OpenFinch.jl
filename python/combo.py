@@ -2,10 +2,40 @@ import time
 from ImageCapture import ImageCapture
 from Display import Display
 from CameraControl import start_pig, trigger_wave_script
+from CameraControl import PiGPIOScript, PiGPIOWave
+
+from dataclasses import dataclass
+
+@dataclass(frozen=False)
+class Config:
+	RED_IN: int = 25
+	GRN_IN: int = 24
+	BLU_IN: int = 22
+
+	RED_OUT: int = 17
+	GRN_OUT: int = 27
+	BLU_OUT: int = 23
+
+	TRIG_OUT: int = 5
+	STROBE_IN: int = 6
+
+	TRIG_IN: int = RED_IN
+	LED_IN: int = BLU_IN
+	LED_OUT: int = RED_OUT
+	TRIG_OUT: int = TRIG_OUT
+	
+	TRIG_TIME: int = 0
+	TRIG_WIDTH: int = 50
+	LED_TIME: int = 5555
+	LED_WIDTH: int = 500
+	WAVE_DURATION: int = 16667
+	
 
 def main():
+	config = Config()
+
 	pig = start_pig()
-	
+
 	vidcap = ImageCapture(capture_raw=False)
 	vidcap.open()
 	# time.sleep(1)
@@ -13,20 +43,20 @@ def main():
 	vidcap.control_set("exposure_auto_priority", 0)
 
 	# {
-	# 9963776: <Control brightness type=integer min=-64 max=64 step=1 default=0 value=32>, 
-	# 9963777: <Control contrast type=integer min=0 max=64 step=1 default=32 value=32>, 
-	# 9963778: <Control saturation type=integer min=0 max=128 step=1 default=64 value=64>, 
-	# 9963779: <Control hue type=integer min=-40 max=40 step=1 default=0 value=1>, 
-	# 9963788: <Control white_balance_temperature_auto type=boolean default=1 value=1>, 
-	# 9963792: <Control gamma type=integer min=72 max=500 step=1 default=100 value=72>, 
-	# 9963795: <Control gain type=integer min=0 max=100 step=1 default=0 value=0>, 
-	# 9963800: <Control power_line_frequency type=menu min=0 max=2 step=1 default=2 value=2>, 
-	# 9963802: <Control white_balance_temperature type=integer min=2800 max=6500 step=1 default=4600 value=4600 flags=inactive>, 
-	# 9963803: <Control sharpness type=integer min=0 max=6 step=1 default=3 value=3>, 
-	# 9963804: <Control backlight_compensation type=integer min=0 max=2 step=1 default=1 value=0>, 
-	# 10094849: <Control exposure_auto type=menu min=0 max=3 step=1 default=3 value=1>, 
-	# 10094850: <Control exposure_absolute type=integer min=1 max=5000 step=1 default=157 value=8>, 
-	# 10094851: <Control exposure_auto_priority type=boolean default=0 value=0>
+	# <Control brightness type=integer min=-64 max=64 step=1 default=0 value=32>, 
+	# <Control contrast type=integer min=0 max=64 step=1 default=32 value=32>, 
+	# <Control saturation type=integer min=0 max=128 step=1 default=64 value=64>, 
+	# <Control hue type=integer min=-40 max=40 step=1 default=0 value=1>, 
+	# <Control white_balance_temperature_auto type=boolean default=1 value=1>, 
+	# <Control gamma type=integer min=72 max=500 step=1 default=100 value=72>, 
+	# <Control gain type=integer min=0 max=100 step=1 default=0 value=0>, 
+	# <Control power_line_frequency type=menu min=0 max=2 step=1 default=2 value=2>, 
+	# <Control white_balance_temperature type=integer min=2800 max=6500 step=1 default=4600 value=4600 flags=inactive>, 
+	# <Control sharpness type=integer min=0 max=6 step=1 default=3 value=3>, 
+	# <Control backlight_compensation type=integer min=0 max=2 step=1 default=1 value=0>, 
+	# <Control exposure_auto type=menu min=0 max=3 step=1 default=3 value=1>, 
+	# <Control exposure_absolute type=integer min=1 max=5000 step=1 default=157 value=8>, 
+	# <Control exposure_auto_priority type=boolean default=0 value=0>
 	# }
 
 	time.sleep(1)
@@ -48,7 +78,7 @@ def main():
 	# time.sleep(2)
 
 	display = Display()
-
+	
 	frame_count = 0
 	start_time = time.time()
 
@@ -58,23 +88,25 @@ def main():
 	t_min = 0 # 2777
 	t_max = 8333 # + 2778
 	
-	LED_WIDTH = 200
+	config.LED_WIDTH = 200
+	config.WAVE_DURATION = 0
 
 	c = int((t_max - t_min) // n)
-
-	RED_OUT = 17
-	GRN_OUT = 27
-	BLU_OUT = 23
 
 	skip = 0
 
 	vidcap.control_set("exposure_auto_priority", 1)
 
+	kwargs = config.__dict__
+	kwargs["LED_MASK"] = 1<<config.RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
+ 
 	while True:
 		for i in range(n + 1):
-			LED_TIME = t_min + c*i
-			LED_MASK = 1<<RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
-			s = trigger_wave_script(pig, LED_TIME=LED_TIME, LED_WIDTH=LED_WIDTH, LED_MASK=LED_MASK, WAVE_DURATION=0)
+			config.LED_TIME = t_min + c*i
+
+			wave = PiGPIOWave(pig, config)
+
+			s = trigger_wave_script(pig, wave, config)
 			
 			while True:
 				while s.initing():
@@ -94,9 +126,8 @@ def main():
 				# skip |= 4
 
 			s.delete()
-			pig.wave_clear()
+			wave.delete()
 	
-
 			try:
 				img = vidcap.capture_frame()
 				frame_count += 1
