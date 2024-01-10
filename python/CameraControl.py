@@ -97,16 +97,15 @@ def trigger_wave_script(pig, **kwargs):
 	TRIG_WIDTH = kwargs.get('TRIG_WIDTH', 50)
 	LED_IN = kwargs.get('LED_IN', 22)
 	LED_TIME = kwargs.get('LED_TIME', 5555)
+	LED_OUT = kwargs.get('LED_OUT', 17)
 	RED_OUT = kwargs.get('RED_OUT', 17)
 	GRN_OUT = kwargs.get('GRN_OUT', 27)
 	BLU_OUT = kwargs.get('BLU_OUT', 23)
 	LED_WIDTH = kwargs.get('LED_WIDTH', 500)
 	STROBE_IN = kwargs.get('STROBE_IN', 6)
 	WAVE_DURATION = kwargs.get('WAVE_DURATION', 16667)
-	G1 = kwargs.get('G1', 23)
-	G2 = kwargs.get('G2', 27)
 
-	for pin in [G1, G2, TRIG_OUT, RED_OUT, GRN_OUT, BLU_OUT]:
+	for pin in [TRIG_OUT, RED_OUT, GRN_OUT, BLU_OUT, LED_OUT]:
 		pig.set_mode(pin, pigpio.OUTPUT)
 
 	for pin in [TRIG_IN, LED_IN, STROBE_IN]:
@@ -115,13 +114,11 @@ def trigger_wave_script(pig, **kwargs):
 	dtled = max(0, LED_TIME - TRIG_WIDTH - TRIG_TIME)
 	dtif = max(0, WAVE_DURATION - LED_TIME - LED_WIDTH - TRIG_TIME - TRIG_WIDTH)
 
-	LED_ON_HIGH = 1<<RED_OUT;
-	LED_ON_LOW	= 0;
-	LED_OFF_HIGH = 0;
-	LED_OFF_LOW = 1<<RED_OUT;
+	LED_ON_HIGH = kwargs.get('LED_MASK', 1<<LED_OUT)
+	LED_ON_LOW	= 0
+	LED_OFF_HIGH = 0
+	LED_OFF_LOW = kwargs.get('LED_MASK', 1<<LED_OUT)
  
-	LED_ALL = 1<<RED_OUT | 1<<GRN_OUT | 1<<BLU_OUT
-
 	wave = []	
 	wave.append(pigpio.pulse(0, 0, TRIG_TIME))
 	wave.append(pigpio.pulse(0, 1<<TRIG_OUT, TRIG_WIDTH))
