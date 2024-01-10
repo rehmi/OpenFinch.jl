@@ -9,8 +9,26 @@ if __name__ == "__main__":
 	
 	vidcap = ImageCapture(capture_raw=False)
 	vidcap.open()
+	time.sleep(1)
+
 	vidcap.control_set("exposure_auto_priority", 0)
 
+	vidcap.control_set("brightness"					,	32)
+	vidcap.control_set("contrast"					,	32)
+	vidcap.control_set("saturation"					,	64)
+	vidcap.control_set("hue"						,	1)
+	vidcap.control_set("gamma"						,	72)
+	vidcap.control_set("gain"						,	54)
+	vidcap.control_set("power_line_frequency"		,	2)
+	vidcap.control_set("sharpness"					,	3)
+	vidcap.control_set("backlight_compensation"		,	0)
+	vidcap.control_set("exposure_auto"				,	1)
+	vidcap.control_set("exposure_absolute"			,	8)
+	vidcap.control_set("exposure_auto_priority"		,	0)
+	vidcap.control_set("white_balance_temperature" 	,	4600)
+
+	# time.sleep(2)
+ 
 	display = Display()
 
 	frame_count = 0
@@ -24,13 +42,14 @@ if __name__ == "__main__":
 	c = int((t_max - t_min) // n)
  
 	skip = 0
-
+ 
 	vidcap.control_set("exposure_auto_priority", 1)
 
 	while True:
 		for i in range(n + 1):
 			while True:
-				s = trigger_wave_script(pig, LED_TIME=t_min + i * c)
+				LED_TIME = t_min + 800 # + c*i
+				s = trigger_wave_script(pig, LED_TIME=LED_TIME, LED_WIDTH=100)
 			
 				while s.initing():
 					pass
@@ -49,16 +68,16 @@ if __name__ == "__main__":
 				if params_valid(p):
 					break
 				
-				skip |= 4
+				# skip |= 4
 
 			try:
 				img = vidcap.capture_frame()
 				frame_count += 1
 
-				if not (skip & 1):
-					display.show_frame(img)
+				# if not (skip & 1):
+				display.show_frame(img)
 
-				skip >>= 1
+				# skip >>= 1
 
 				if time.time() - start_time >= 5:
 					fps = frame_count / (time.time() - start_time)

@@ -100,7 +100,7 @@ def trigger_wave_script(pig, **kwargs):
 	RED_OUT = kwargs.get('RED_OUT', 17)
 	GRN_OUT = kwargs.get('GRN_OUT', 27)
 	BLU_OUT = kwargs.get('BLU_OUT', 23)
-	LED_WIDTH = kwargs.get('LED_WIDTH', 2)
+	LED_WIDTH = kwargs.get('LED_WIDTH', 500)
 	STROBE_IN = kwargs.get('STROBE_IN', 6)
 	WAVE_DURATION = kwargs.get('WAVE_DURATION', 16667)
 	G1 = kwargs.get('G1', 23)
