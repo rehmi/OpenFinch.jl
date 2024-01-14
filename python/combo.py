@@ -6,6 +6,9 @@ from CameraControl import PiGPIOScript, PiGPIOWave
 
 from dataclasses import dataclass
 
+import threading
+from queue import Queue
+
 @dataclass(frozen=False)
 class Config:
 	RED_IN: int = 25
@@ -27,10 +30,9 @@ class Config:
 	TRIG_TIME: int = 0
 	TRIG_WIDTH: int = 50
 	LED_TIME: int = 5555
-	LED_WIDTH: int = 500
-	WAVE_DURATION: int = 16667
+	LED_WIDTH: int = 20
+	WAVE_DURATION: int = 8333
 	
-
 def main():
 	config = Config()
 
@@ -67,11 +69,11 @@ def main():
 	vidcap.control_set("hue"						,	1)
 	vidcap.control_set("gamma"						,	100)
 	vidcap.control_set("gain"						,	0)
-	vidcap.control_set("power_line_frequency"		,	2)
-	vidcap.control_set("sharpness"					,	3)
+	vidcap.control_set("power_line_frequency"		,	0)
+	vidcap.control_set("sharpness"					,	6)
 	vidcap.control_set("backlight_compensation"		,	0)
 	vidcap.control_set("exposure_auto"				,	1)
-	vidcap.control_set("exposure_absolute"			,	1)
+	vidcap.control_set("exposure_absolute"			,   66)
 	vidcap.control_set("exposure_auto_priority"		,	0)
 	vidcap.control_set("white_balance_temperature" 	,	4600)
 
@@ -79,17 +81,14 @@ def main():
 
 	display = Display()
 	
-	frame_count = 0
-	start_time = time.time()
-
-	# trigger_loop(pig)
-
 	n=100
-	t_min = 0 # 2777
-	t_max = 8333 # + 2778
+	t_min = 1000
+	t_max = 8333 + t_min # + 2778
 	
-	config.LED_WIDTH = 200
-	config.WAVE_DURATION = 0
+	config.TRIG_WIDTH = 10
+	config.LED_WIDTH = 50
+	config.WAVE_DURATION = 40000
+	config.LED_TIME = t_min
 
 	c = int((t_max - t_min) // n)
 
@@ -97,57 +96,48 @@ def main():
 
 	vidcap.control_set("exposure_auto_priority", 1)
 
-	kwargs = config.__dict__
-	kwargs["LED_MASK"] = 1<<config.RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
- 
+	config.LED_MASK = 1<<config.RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
+
+	s = trigger_wave_script(pig, config)
+	wave = PiGPIOWave(pig, config)
+	s.start(wave.id)
+
+	frame_count = 0
+	start_time = time.time()
+
 	while True:
 		for i in range(n + 1):
-			config.LED_TIME = t_min + c*i
-
-			wave = PiGPIOWave(pig, config)
-
-			s = trigger_wave_script(pig, wave, config)
-			
-			while True:
-				while s.initing():
-					pass
-				
-				s.start()
-			
-				while s.running():
-					pass
-			
-				# p = s.params()
-				logging.info(s.param_summary())
-
-				if s.params_valid():
-					break
-				
-				# skip |= 4
-
-			s.delete()
+			s.set_params(0xffffffff)			# deactivate the current wave
+			display.waitKey(1)
+			# while s.params()[3] != 0:	# wait for sequencing_paused
+				# print(s.status(), " ", s.params())
+				# time.sleep(0.010)
+				# pass
+			# now safe to delete the wave
 			wave.delete()
-	
+			config.LED_TIME = t_min + c*i
+			wave = PiGPIOWave(pig, config)
+			s.set_params(wave.id)
+
+			# logging.info(s.params())
 			try:
 				img = vidcap.capture_frame()
 				frame_count += 1
 
-				# if not (skip & 1):
 				display.show_frame(img)
 
-				# skip >>= 1
-
-				if time.time() - start_time >= 5:
+				if time.time() - start_time >= 3:
 					fps = frame_count / (time.time() - start_time)
 					logging.info(f"Average FPS: {fps:.2f}")
 					frame_count = 0
 					start_time = time.time()
 
-				if display.waitKey(1) & 0xFF == ord('q'):
-					break
-			except AttributeError:
+			except Exception as e:
+				logging.info(f"EXCEPTION: {e}")
 				continue
-
+	
+	wave.delete()
+	s.delete()
 	display.close()
 	vidcap.close()
 

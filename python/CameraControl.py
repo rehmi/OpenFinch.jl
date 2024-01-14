@@ -73,6 +73,10 @@ class PiGPIOScript:
 		_, p = self.pig.script_status(self.id)
 		return p
 
+	def set_params(self, *args):
+		if self.id >= 0:
+			self.pig.update_script(self.id, list(args))
+
 	def params_valid(self):
 		params = self.params()
 		hi_to_lo = params[8] - params[6]
@@ -130,7 +134,7 @@ class PiGPIOWave:
 
 	def generate_wave(self):
 		cf = self.config
-  
+
 		for pin in [cf.TRIG_OUT, cf.RED_OUT, cf.GRN_OUT, cf.BLU_OUT, cf.LED_OUT]:
 			self.pig.set_mode(pin, pigpio.OUTPUT)
 
@@ -154,35 +158,58 @@ class PiGPIOWave:
 		return self.pig.wave_create()
 
 
-def trigger_wave_script(pig, wave, config):
+def trigger_wave_script(pig, config):
 	script = f"""
 	pads 0 16								# set pad drivers to 16 mA
 
-	lda {wave.id} sta p0
+	# we expect wave id in p0
 	lda {config.TRIG_IN} sta p1
 	lda {config.STROBE_IN} sta p2
 
+	ld p3 1				# status: starting
+
 tag 100
-	br1 sta p4								# capture starting GPIO in p4
-	tick sta p5								# capture the start time in p5
+	lda p0         		# load the current value of p0
+	or 0 jp 101    		# if p0 is valid (>=0), proceed
+	ld p3 0				# status: sequencing paused
+	mils 1      		# otherwise delay for a bit
+	jmp 100       		# and try again
 
-tag 101	mics 1	r p1		jz 101			# wait for p1 to go high
+# 	ld p3 2 			# status: waiting for p2 low
+# tag 110
+# 	r p2 jnz 110		# wait if p2 is high
+# 	ld p3 3				# status: waiting for p2 high
+# tag 111
+# 	r p2 jz 111			# wait for rising edge of p2
 
-	tick sta p6								# capture trigger high time in p6
+	ld p3 4				# status: sequencing started
+	br1 sta v4			# capture starting GPIO in p4
+	tick sta v5			# capture the start time in p5
 
-tag 102	mics 1 r p1			jnz 102			# wait for falling edge on p1
+tag 101
+	r p1 jz 101			# wait for p1 to go high
+	tick sta v6			# capture trigger high time in p6
 
-	br1 sta p7								# capture GPIO at trigger low in p7
-	tick sta p8								# capture trigger low time in p8
+	ld p3 5
+tag 102
+	r p1 jnz 102		# wait for falling edge on p1
+	br1 sta v7			# capture GPIO at trigger low in p7
+	tick sta v8			# capture trigger low time in p8
+	ld p3 6				# status: wave tx started
+	wvtx p0				# trigger the wave
 
-	wvtx p0									# trigger the wave
-tag 103	wvbsy	jnz 103 					# wait for wave to finish
-	tick sta p9								# capture wave finish time in p9
+tag 103
+	wvbsy
+	jnz 103 			# wait for wave to finish
+	tick sta v9			# capture wave finish time in p9
+	ld p3 7				# status: wave tx complete
+	ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
+	ld p3 8				# status: return params updated 
 
-	# wvdel p0		 						# release the wave resources
-	# jmp 100
+	jmp 100				# do it again
 	ret
 	"""
+
 	return PiGPIOScript(pig, script)
 
 import time
