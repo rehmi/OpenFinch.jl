@@ -64,8 +64,9 @@ def main():
 				wave = PiGPIOWave(pig, config)
 				script.set_params(wave.id)
 
-				display.show_frame(img)
-				display.waitKey(1)
+				display.set_image(img)
+				display.display_image()
+				display.update()
 
 				if time.time() - start_time >= 3:
 					fps = frame_count / (time.time() - start_time)
