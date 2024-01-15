@@ -1,8 +1,7 @@
 from enum import Enum
-# import v4l2py
 import pigpio
+from dataclasses import dataclass
 
-# from PIL import Image, ImageShow, ImageColor
 
 class ScriptStatus(Enum):
 	INITING = 0
@@ -10,6 +9,46 @@ class ScriptStatus(Enum):
 	RUNNING = 2
 	WAITING = 3
 	FAILED = 4
+ 
+def CameraControlDefaults():
+    return {
+		"brightness": 0,
+		"contrast": 32,
+		"saturation": 0,
+		"hue": 1,
+		"gamma": 100,
+		"gain": 0,
+		"power_line_frequency": 0,
+		"sharpness": 6,
+		"backlight_compensation": 0,
+		"exposure_auto": 1,
+		"exposure_absolute": 66,
+		"exposure_auto_priority": 0
+	}
+
+@dataclass(frozen=False)
+class TriggerConfig:
+	RED_IN: int = 25
+	GRN_IN: int = 24
+	BLU_IN: int = 22
+
+	RED_OUT: int = 17
+	GRN_OUT: int = 27
+	BLU_OUT: int = 23
+
+	TRIG_OUT: int = 5
+	STROBE_IN: int = 6
+
+	TRIG_IN: int = RED_IN
+	LED_IN: int = BLU_IN
+	LED_OUT: int = RED_OUT
+	TRIG_OUT: int = TRIG_OUT
+	
+	TRIG_TIME: int = 0
+	TRIG_WIDTH: int = 50
+	LED_TIME: int = 5555
+	LED_WIDTH: int = 20
+	WAVE_DURATION: int = 8333
 
 def preprocess_script(text):
 	# Split the script into lines
