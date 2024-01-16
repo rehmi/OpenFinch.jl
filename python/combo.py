@@ -49,6 +49,12 @@ class MainClass:
 
 		# Initialize display and script/wave-related components
 		self.display = Display()
+  		# XXX begin hack to ensure the display appears on monitor[0]
+		self.display.move_to_monitor(0)
+		self.display.update()
+		self.display.move_to_monitor(0)
+		self.display.update()
+		# XXX end hack
 		self.script = trigger_wave_script(self.pig, self.config)
 		self.wave = PiGPIOWave(self.pig, self.config)
 
