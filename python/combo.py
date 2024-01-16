@@ -106,7 +106,7 @@ class MainClass:
 				if img is not None:
 					self.fps_logger.update()
 					self.reset_wave(i)
-					# self.update_display(img)
+					self.update_display(img)
 				else:
 					logging.info("capture_frame timed out!")
 			except Exception as e:
