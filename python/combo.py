@@ -3,93 +3,108 @@ from ImageCapture import ImageCapture
 from Display import Display
 from CameraControl import start_pig, trigger_wave_script, TriggerConfig
 from CameraControl import PiGPIOScript, PiGPIOWave, CameraControlDefaults
-
 import threading
 from queue import Queue
+import logging
 
-def initialize_config(config):
-	config.TRIG_WIDTH = 10
-	config.LED_WIDTH = 50
-	config.WAVE_DURATION = 40000
-	config.LED_TIME = 1000
-	config.LED_MASK = 1<<config.RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
-	return config
+class MainClass:
+	def __init__(self):
+		self.wave = None
+		self.script = None
+		self.display = None
+		self.vidcap = None
+		self.config = None
+		self.pig = None
 
-global wave, script, display, vidcap, config, pig
+	def initialize_config(self, config):
+		config.TRIG_WIDTH = 10
+		config.LED_WIDTH = 50
+		config.WAVE_DURATION = 40000
+		config.LED_TIME = 1000
+		config.LED_MASK = 1<<config.RED_OUT # | 1<<GRN_OUT | 1<<BLU_OUT
+		return config
 
-def main():
-	global wave, script, display, vidcap, config, pig
-	config = TriggerConfig()
-	initialize_config(config)
-	pig = start_pig()
-	control_defaults = CameraControlDefaults()
-	vidcap = ImageCapture(capture_raw=False, controls=control_defaults)
-	vidcap.open()
+	def initialize_camera(self):
+		self.config = TriggerConfig()
+		self.initialize_config(self.config)
+		self.pig = start_pig()
+		control_defaults = CameraControlDefaults()
+		self.vidcap = ImageCapture(capture_raw=False, controls=control_defaults)
+		self.vidcap.open()
 
-	display = Display()
-	
-	n=100
-	t_min = 1000
-	t_max = 8333 + t_min # + 2778
-	config.LED_TIME = t_min
-	c = int((t_max - t_min) // n)
+	def initialize_display(self):
+		self.display = Display()
 
-	vidcap.control_set("exposure_auto_priority", 1)
+	def initialize_script_and_wave(self):
+		self.script = trigger_wave_script(self.pig, self.config)
+		self.wave = PiGPIOWave(self.pig, self.config)
+		while self.script.initing():
+			pass
+		self.script.start(self.wave.id)
 
-	script = trigger_wave_script(pig, config)
-	wave = PiGPIOWave(pig, config)
-	while script.initing():
-		pass;
-	script.start(wave.id)
+	def calculate_led_time(self, i, n):
+		c = int((self.t_max - self.t_min) // n)
+		return self.t_min + c*i
 
-	frame_count = 0
-	start_time = time.time()
+	def capture_frame(self, i):
+		self.config.LED_TIME = self.calculate_led_time(i, 100)
+		img = self.vidcap.capture_frame()
+		self.script.set_params(0xffffffff) # deactivate the current wave
+		self.wave.delete()
+		self.wave = PiGPIOWave(self.pig, self.config)
+		self.script.set_params(self.wave.id)
+		return img
 
-	while True:
+	def update_display(self, img):
+		self.display.set_image(img)
+		self.display.display_image()
+		self.display.update()
+
+	def log_fps(self, frame_count, start_time):
+		if time.time() - start_time >= 3:
+			fps = frame_count / (time.time() - start_time)
+			logging.info(f"Average FPS: {fps:.2f}")
+			frame_count = 0
+			start_time = time.time()
+			return frame_count, start_time
+		return frame_count, start_time
+
+	def process_frames(self):
+		n=100
+		self.t_min = 1000
+		self.t_max = 8333 + self.t_min
+		self.vidcap.control_set("exposure_auto_priority", 1)
+
+		frame_count = 0
+		start_time = time.time()
+
 		for i in range(n + 1):
 			try:
-				# don't disable the wave until after a capture
-				# logging.info(script.params())
-				config.LED_TIME = t_min + c*i
-				img = vidcap.capture_frame()
-				script.set_params(0xffffffff) # deactivate the current wave
+				img = self.capture_frame(i)
+				self.update_display(img)
 				frame_count += 1
-				# while script.pig.wave_tx_busy():	# wait for sequencing_paused
-				# 	# print(".", end="")
-				# 	# print(s.status(), " ", s.params())
-				# 	time.sleep(0.001)
-				# 	pass
-				# now safe to delete the wave
-				wave.delete()
-				wave = PiGPIOWave(pig, config)
-				script.set_params(wave.id)
-
-				display.set_image(img)
-				display.display_image()
-				display.update()
-
-				if time.time() - start_time >= 3:
-					fps = frame_count / (time.time() - start_time)
-					logging.info(f"Average FPS: {fps:.2f}")
-					frame_count = 0
-					start_time = time.time()
-
-
+				frame_count, start_time = self.log_fps(frame_count, start_time)
 			except Exception as e:
 				logging.info(f"EXCEPTION: {e}")
 				continue
-	
+				
+	def main(self):
+		self.initialize_camera()
+		self.initialize_display()
+		self.initialize_script_and_wave()
+		while True:
+			self.process_frames()
 
-import logging
 if __name__ == "__main__":
 	try:
 		fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
 		logging.basicConfig(level="INFO", format=fmt)
-		main()
+		main_obj = MainClass()
+		main_obj.main()
 	except KeyboardInterrupt:
 		logging.info("Ctrl-C pressed. Bailing out")
 	finally:
-		wave.delete()
-		script.delete()
-		display.close()
-		vidcap.close()
+		main_obj.wave.delete()
+		main_obj.script.delete()
+		main_obj.display.close()
+		main_obj.vidcap.close()
