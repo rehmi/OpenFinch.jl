@@ -61,6 +61,7 @@ class MainClass:
 		try:
 			self.display.close()
 			self.vidcap.close()
+			self.script.stop()
 			self.script.delete()
 			self.wave.delete()
 		except Exception as e:
@@ -68,6 +69,20 @@ class MainClass:
 
 	def capture_frame(self):
 		return self.vidcap.capture_frame()
+
+	def capture_frame_with_timeout(self, timeout=0.25):
+		result = [None]
+
+		def target():
+			result[0] = self.vidcap.capture_frame()
+
+		thread = threading.Thread(target=target)
+		thread.start()
+		thread.join(timeout)
+		if thread.is_alive():
+			return None
+		else:
+			return result[0]
   
 	def reset_wave(self, i):
 		c = int((self.t_max - self.t_min) // self.num_iterations)
@@ -82,24 +97,18 @@ class MainClass:
 		self.display.display_image()
 		self.display.update()
 
-	def log_fps(self, frame_count, start_time):
-		if time.time() - start_time >= 3:
-			fps = frame_count / (time.time() - start_time)
-			logging.info(f"Average FPS: {fps:.2f}")
-			frame_count = 0
-			start_time = time.time()
-			return frame_count, start_time
-		return frame_count, start_time
-
 	def process_frames(self):
 		self.vidcap.control_set("exposure_auto_priority", 1)
-
+		self.fps_logger.reset()
 		for i in range(self.num_iterations + 1):
 			try:
-				img = self.capture_frame()
-				self.fps_logger.update()
-				self.reset_wave(i)
-				self.update_display(img)
+				img = self.capture_frame_with_timeout()
+				if img is not None:
+					self.fps_logger.update()
+					self.reset_wave(i)
+					# self.update_display(img)
+				else:
+					logging.info("capture_frame timed out!")
 			except Exception as e:
 				logging.info(f"EXCEPTION: {e}")
 				continue
