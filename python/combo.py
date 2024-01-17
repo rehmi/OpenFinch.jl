@@ -18,11 +18,23 @@ import os
 import pigpio
 
 
-class ImageCaptureServer:
+class CameraServer:
 	def __init__(self):
 		self.brightness, self.contrast, self.gamma = (0.5, 0.5, 1.0)
 		self.img_height, self.img_width = 1200, 1600
-		self.vidcap = self.initialize_image_capture()
+		self.cam = CameraController()
+		self.cam.set_cam_triggered()
+		self.ws = None
+  
+	async def on_startup(self, app):
+		app['task'] = asyncio.create_task(self.periodic_task())
+
+	async def periodic_task(self):
+		while True:
+			# logging.info("periodic_task executed")
+			if self.ws is not None:
+				await self.send_captured_image(self.ws)
+			await asyncio.sleep(0.033)
 
 	def create_random_image(self, width=1600, height=1200):
 		img = Image.fromarray(np.random.randint(0, 256, (height, width, 3), dtype=np.uint8))
@@ -43,42 +55,19 @@ class ImageCaptureServer:
 		encodedImage.seek(0)
 		return encodedImage.read()
 
-	def generate_image(self, brightness, contrast, gamma, width=1600, height=1200):
-		img = self.create_random_image(width, height)
-		img = self.enhance_image(img, brightness, contrast, gamma)
-		return img
-
-	def initialize_image_capture(self, capture_raw=False):
-		pi = pigpio.pi()
-		pi.set_mode(17, pigpio.OUTPUT)
-		pi.write(17, 0)
-		cap = ImageCapture(capture_raw=capture_raw)
-		cap.control_set("exposure_auto_priority", 0)
-		cap.open()
-		return cap
-
-	async def send_random_image(self, ws, width=None, height=None):
-		if width is None:
-			width = self.img_width
-		if height is None:
-			height = self.img_height
-		img = self.generate_image(self.brightness, self.contrast, self.gamma, height=height, width=width)
-		img_bin = self.image_to_blob(img)
-		await ws.send_str(json.dumps({'image_response': {'image': 'next'}}))
-		await ws.send_bytes(img_bin)
-
 	async def send_captured_image(self, ws, width=None, height=None):
 		if width is None:
 			width = self.img_width
 		if height is None:
 			height = self.img_height
-		img = self.vidcap.capture_frame()
+		img = self.cam.capture_frame()
 		img_bin = self.image_to_blob(img)
 		await ws.send_str(json.dumps({'image_response': {'image': 'next'}}))
 		await ws.send_bytes(img_bin)
 
 	async def handle_message(self, request):
 		ws = web.WebSocketResponse()
+		self.ws = ws
 		await ws.prepare(request)
 
 		async for msg in ws:
@@ -104,15 +93,7 @@ class ImageCaptureServer:
 			file_path = os.path.join(script_dir, request.path.lstrip('/'))
 		return web.FileResponse(file_path)
 
-def start_server():
-	server = ImageCaptureServer()
-	app = web.Application()
-	app.router.add_get('/', server.handle_http)
-	app.router.add_get('/ws', server.handle_message)
-	web.run_app(app, host='0.0.0.0', port=8000)
-
-
-class FPSLogger:
+class FrameRateMonitor:
 	def __init__(self):
 		self.frame_count = 0
 		self.start_time = time.time()
@@ -131,7 +112,7 @@ class FPSLogger:
 			logging.info(f"Average FPS: {fps:.2f}")
 			self.reset()
 
-class MainClass:
+class CameraController:
 	def __init__(self):
 		# Initialize the configuration first
 		self.config = TriggerConfig()
@@ -142,10 +123,10 @@ class MainClass:
 		self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
 
 		self.dt = 8333 // 1000
-		self.t_min = 1000
+		self.t_min = 2000
 		self.t_max = 8333 + self.t_min
 		self.t_cur = self.t_min
-		self.fps_logger = FPSLogger()
+		self.fps_logger = FrameRateMonitor()
 
 		# Now initialize the rest of the components that depend on the config
 		self.pig = start_pig()
@@ -169,6 +150,9 @@ class MainClass:
 			pass
 		self.script.start(self.wave.id)
 
+	def __del__(self):
+		self.shutdown()
+  
 	def shutdown(self):
 		try:
 			self.display.close()
@@ -225,9 +209,14 @@ class MainClass:
 		except Exception as e:
 			logging.info(f"EXCEPTION: {e}")
 
+	def set_cam_triggered(self):
+		self.vidcap.control_set("exposure_auto_priority", 1)
+
+	def set_cam_freerunning(self):
+		self.vidcap.control_set("exposure_auto_priority", 0)
 
 	def main(self):
-		self.vidcap.control_set("exposure_auto_priority", 1)
+		self.set_cam_triggered()
 		self.fps_logger.reset()
 		while True:
 			if self.t_cur > self.t_max:
@@ -240,13 +229,20 @@ class MainClass:
 
 
 if __name__ == "__main__":
-	# start_server()
 	try:
 		fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
 		logging.basicConfig(level="INFO", format=fmt)
-		main_obj = MainClass()
-		main_obj.main()
+
+		server = CameraServer()
+		app = web.Application()
+		app.router.add_get('/', server.handle_http)
+		app.router.add_get('/ws', server.handle_message)
+        # Attach the startup handler
+		app.on_startup.append(server.on_startup)
+		web.run_app(app, host='0.0.0.0', port=8000)
+		# main_obj = CameraController()
+		# main_obj.main()
 	except KeyboardInterrupt:
 		logging.info("Ctrl-C pressed. Bailing out")
 	finally:
-		main_obj.shutdown()
+		server.cam.shutdown()
