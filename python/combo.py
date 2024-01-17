@@ -83,6 +83,7 @@ class CameraServer:
 		img = self.cam.capture_frame()
 		if self.update_t_cur_enable:
 			self.cam.update_t_cur()
+			await self.update_led_time(self.cam.config.LED_TIME)
 		self.cam.update_wave()
 		img_bin = self.image_to_blob(img)
 
@@ -93,7 +94,15 @@ class CameraServer:
 			except Exception as e:
 				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
 				self.active_connections.remove(ws)
-    
+
+	async def update_led_time(self, new_value):
+		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
+			try:
+				await ws.send_str(json.dumps({'LED_TIME': {'value': new_value}}))
+			except Exception as e:
+				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
+				self.active_connections.remove(ws)
+				
 	async def handle_message(self, request):
 		ws = web.WebSocketResponse()
 		self.active_connections.add(ws)

@@ -33,22 +33,22 @@
 	<div>
 		<label for="brightness">Brightness:</label>
 		<input type="range" id="brightness" name="brightness" min="0" max="1" step="0.01" value="0.5">
-		<span id="brightnessValue">0.5</span>
+		<span id="brightness_Value">0.5</span>
 	</div>
 	<div>
 		<label for="contrast">Contrast:</label>
 		<input type="range" id="contrast" name="contrast" min="0" max="1" step="0.01" value="0.5">
-		<span id="contrastValue">0.5</span>
+		<span id="contrast_Value">0.5</span>
 	</div>
 	<div>
 		<label for="gamma">Gamma:</label>
 		<input type="range" id="gamma" name="gamma" min="0" max="2" step="0.01" value="1">
-		<span id="gammaValue">1</span>
+		<span id="gamma_Value">1</span>
 	</div>
 	<div>
-		<label for="led_time">LED Time:</label>
-		<input type="range" id="led_time" name="led_time" min="1000" max="9333" step="1" value="1000">
-		<span id="led_timeValue">1000</span>
+		<label for="LED_TIME">LED Time:</label>
+		<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
+		<span id="LED_TIME_Value">1000</span>
 	</div>
 
 	<div>
@@ -84,13 +84,19 @@
 				if (data.image_response && data.image_response.image === 'next') {
 					nextIsImage = true;
 				}
+				// if ('LED_TIME' in data) {
+				if (data.LED_TIME) {
+					var newValue = data.LED_TIME.value;
+					$('#LED_TIME').val(newValue);
+					$('#LED_TIME_Value').text(newValue);
+				}
 			}
 		};
 
-		$('#led_time').on('input', function () {
+		$('#LED_TIME').on('input', function () {
 			var sliderId = this.id;
 			var sliderValue = $(this).val();
-			$('#' + sliderId + 'Value').text(sliderValue);
+			$('#' + sliderId + '_Value').text(sliderValue);
 			if (ws.readyState == WebSocket.OPEN) {
 				ws.send(JSON.stringify({
 					'LED_TIME': {
@@ -127,7 +133,7 @@
 		$('input[type=range]').on('input', function () {
 			var sliderId = this.id;
 			var sliderValue = $(this).val();
-			$('#' + sliderId + 'Value').text(sliderValue);
+			$('#' + sliderId + '_Value').text(sliderValue);
 			if (!throttle && ws.readyState == WebSocket.OPEN) {
 				ws.send(JSON.stringify({
 					'control_change': {
