@@ -16,7 +16,7 @@ from io import BytesIO
 from aiohttp import web
 import os
 import pigpio
-
+import numpy as np
 
 class CameraServer:
 	def __init__(self):
@@ -25,7 +25,24 @@ class CameraServer:
 		self.cam = CameraController()
 		self.cam.set_cam_triggered()
 		self.active_connections = set()
+		self.initialize_display()
+
+	def initialize_display(self):
+		# Initialize display and script/wave-related components
+		self.display = Display()
+		# XXX begin hack to ensure the display appears on monitor[0]
+		self.display.move_to_monitor(0)
+		self.display.update()
+		self.display.move_to_monitor(0)
+		self.display.update()
+		# XXX end hack
   
+	def update_display(self, img):
+		img_array = np.array(img)
+		self.display.set_image(img_array)
+		self.display.display_image()
+		self.display.update()
+
 	async def on_startup(self, app):
 		app['task'] = asyncio.create_task(self.periodic_task())
 
@@ -94,6 +111,14 @@ class CameraServer:
 					image_request = data.get('image_request', {})
 					await self.send_captured_image(ws)
 
+				if data.get('SLM_image', '') == 'next':
+					image_blob = await ws.receive_bytes()
+					logging.info(f"SLM_image received {len(image_blob)} bytes")
+					img = Image.open(BytesIO(image_blob))
+					logging.info(f"img has type {type(img)} and size {img.size}")
+					self.display.move_to_monitor(1)
+					self.update_display(img)
+
 		self.active_connections.remove(ws)
 		return ws
 	
@@ -135,11 +160,11 @@ class CameraController:
 		self.config.LED_TIME = 1000
 		self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
 
-		self.dt = 8333 // 1000
-		self.t_min = 2000
+		self.dt = 8333 // 100
+		self.t_min = 1000
 		self.t_max = 8333 + self.t_min
 		self.t_cur = self.t_min
-		self.fps_logger = FrameRateMonitor()
+		self.fps_logger = FrameRateMonitor(60)
 
 		# Now initialize the rest of the components that depend on the config
 		self.pig = start_pig()
@@ -148,16 +173,6 @@ class CameraController:
 		self.vidcap.open()
 		self.initialize_trigger()
 
-	def initialize_display(self):
-		# Initialize display and script/wave-related components
-		self.display = Display()
-		# XXX begin hack to ensure the display appears on monitor[0]
-		self.display.move_to_monitor(0)
-		self.display.update()
-		self.display.move_to_monitor(0)
-		self.display.update()
-		# XXX end hack
-  
 	def initialize_trigger(self):
 		self.script = trigger_wave_script(self.pig, self.config)
 		self.wave = PiGPIOWave(self.pig, self.config)
@@ -173,12 +188,21 @@ class CameraController:
 	def shutdown(self):
 		try:
 			self.display.close()
+		except Exception as e:
+			logging.info(f"CameraController shutting down display: {e}")
+		try:
 			self.vidcap.close()
+		except Exception as e:
+			logging.info(f"CameraController shutting down vidcap: {e}")
+		try:
 			self.script.stop()
 			self.script.delete()
+		except Exception as e:
+			logging.info(f"CameraController shutting down script: {e}")
+		try:
 			self.wave.delete()
 		except Exception as e:
-			logging.info(f"While shutting down: {e}")
+			logging.info(f"CameraController shutting down wave: {e}")
 
 	def capture_frame(self, timeout=0):
 		if timeout <= 0:
@@ -211,22 +235,6 @@ class CameraController:
 	def update_wave(self):
 		self.stop_wave()
 		self.set_delay(self.t_cur)
-
-	def update_display(self, img):
-		self.display.set_image(img)
-		self.display.display_image()
-		self.display.update()
-
-	def process_frame(self):
-		try:
-			img = self.capture_frame(timeout=0.25)
-			if img is not None:
-				self.update_wave()
-				self.update_display(img)
-			else:
-				logging.info("capture_frame timed out!")
-		except Exception as e:
-			logging.info(f"EXCEPTION: {e}")
 
 	def set_cam_triggered(self):
 		self.vidcap.control_set("exposure_auto_priority", 1)
