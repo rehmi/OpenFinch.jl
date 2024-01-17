@@ -24,17 +24,19 @@ class CameraServer:
 		self.img_height, self.img_width = 1200, 1600
 		self.cam = CameraController()
 		self.cam.set_cam_triggered()
-		self.ws = None
+		self.active_connections = set()
   
 	async def on_startup(self, app):
 		app['task'] = asyncio.create_task(self.periodic_task())
 
 	async def periodic_task(self):
 		while True:
-			# logging.info("periodic_task executed")
-			if self.ws is not None:
-				await self.send_captured_image(self.ws)
-			await asyncio.sleep(0.033)
+			try:
+				# logging.info("periodic_task executed")
+				await self.send_captured_image()
+				await asyncio.sleep(0.001)
+			except Exception as e:
+				logging.info(f"periodic_task(): got exception {e}")
 
 	def create_random_image(self, width=1600, height=1200):
 		img = Image.fromarray(np.random.randint(0, 256, (height, width, 3), dtype=np.uint8))
@@ -55,19 +57,27 @@ class CameraServer:
 		encodedImage.seek(0)
 		return encodedImage.read()
 
-	async def send_captured_image(self, ws, width=None, height=None):
+	async def send_captured_image(self, width=None, height=None):
 		if width is None:
 			width = self.img_width
 		if height is None:
 			height = self.img_height
 		img = self.cam.capture_frame()
+		self.cam.update_t_cur()
+		self.cam.update_wave()
 		img_bin = self.image_to_blob(img)
-		await ws.send_str(json.dumps({'image_response': {'image': 'next'}}))
-		await ws.send_bytes(img_bin)
 
+		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
+			try:
+				await ws.send_str(json.dumps({'image_response': {'image': 'next'}}))
+				await ws.send_bytes(img_bin)
+			except Exception as e:
+				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
+				self.active_connections.remove(ws)
+    
 	async def handle_message(self, request):
 		ws = web.WebSocketResponse()
-		self.ws = ws
+		self.active_connections.add(ws)
 		await ws.prepare(request)
 
 		async for msg in ws:
@@ -79,10 +89,12 @@ class CameraServer:
 					self.brightness = float(control_change.get('brightness', image_request.get('brightness', self.brightness)))
 					self.contrast = float(control_change.get('contrast', image_request.get('contrast', self.contrast)))
 					self.gamma = float(control_change.get('gamma', image_request.get('gamma', self.gamma)))
-				
+
 				if 'image_request' in data:
 					image_request = data.get('image_request', {})
 					await self.send_captured_image(ws)
+
+		self.active_connections.remove(ws)
 		return ws
 	
 	async def handle_http(self, request):
@@ -94,7 +106,8 @@ class CameraServer:
 		return web.FileResponse(file_path)
 
 class FrameRateMonitor:
-	def __init__(self):
+	def __init__(self, period=5.0):
+		self.period=period
 		self.frame_count = 0
 		self.start_time = time.time()
 
@@ -107,7 +120,7 @@ class FrameRateMonitor:
 
 	def update(self):
 		self.increment()
-		if time.time() - self.start_time >= 3:
+		if time.time() - self.start_time >= self.period:
 			fps = self.frame_count / (time.time() - self.start_time)
 			logging.info(f"Average FPS: {fps:.2f}")
 			self.reset()
@@ -133,7 +146,9 @@ class CameraController:
 		control_defaults = CameraControlDefaults()
 		self.vidcap = ImageCapture(capture_raw=False, controls=control_defaults)
 		self.vidcap.open()
+		self.initialize_trigger()
 
+	def initialize_display(self):
 		# Initialize display and script/wave-related components
 		self.display = Display()
 		# XXX begin hack to ensure the display appears on monitor[0]
@@ -142,6 +157,8 @@ class CameraController:
 		self.display.move_to_monitor(0)
 		self.display.update()
 		# XXX end hack
+  
+	def initialize_trigger(self):
 		self.script = trigger_wave_script(self.pig, self.config)
 		self.wave = PiGPIOWave(self.pig, self.config)
 
@@ -163,22 +180,24 @@ class CameraController:
 		except Exception as e:
 			logging.info(f"While shutting down: {e}")
 
-	def capture_frame(self):
-		return self.vidcap.capture_frame()
-
-	def capture_frame_with_timeout(self, timeout=0.25):
-		result = [None]
-
-		def target():
-			result[0] = self.vidcap.capture_frame()
-
-		thread = threading.Thread(target=target)
-		thread.start()
-		thread.join(timeout)
-		if thread.is_alive():
-			return None
+	def capture_frame(self, timeout=0):
+		if timeout <= 0:
+			self.fps_logger.update()
+			return self.vidcap.capture_frame()
 		else:
-			return result[0]
+			result = [None]
+
+			def target():
+				result[0] = self.vidcap.capture_frame()
+
+			thread = threading.Thread(target=target)
+			thread.start()
+			thread.join(timeout)
+			if thread.is_alive():
+				return None
+			else:
+				self.fps_logger.update()
+				return result[0]
 
 	def stop_wave(self):
 		self.script.set_params(0xffffffff) # deactivate the current wave
@@ -200,7 +219,7 @@ class CameraController:
 
 	def process_frame(self):
 		try:
-			img = self.capture_frame_with_timeout()
+			img = self.capture_frame(timeout=0.25)
 			if img is not None:
 				self.update_wave()
 				self.update_display(img)
@@ -215,18 +234,18 @@ class CameraController:
 	def set_cam_freerunning(self):
 		self.vidcap.control_set("exposure_auto_priority", 0)
 
+	def update_t_cur(self):
+		self.t_cur += self.dt
+		if self.t_cur > self.t_max:
+			self.t_cur = self.t_min
+
 	def main(self):
 		self.set_cam_triggered()
 		self.fps_logger.reset()
 		while True:
-			if self.t_cur > self.t_max:
-				self.t_cur = self.t_min
-
 			self.process_frame()
-			self.fps_logger.update()
-   
-			self.t_cur += self.dt
-
+			self.update_t_cur()
+			self.fps_logger.update()   
 
 if __name__ == "__main__":
 	try:
