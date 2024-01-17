@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Image Viewer</title>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+	<style>
+		body {
+			background-color: lightsteelblue;
+			color: hsl(0, 0%, 10%);
+		}
+
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #0f1010;
+				color: lightblue;
+			}
+		}
+
+		img {
+			width: 80%;
+			height: auto;
+		}
+
+		input[type=range] {
+ 			width: 75%;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Image Viewer</h1>
+	<div>
+		<label for="brightness">Brightness:</label>
+		<input type="range" id="brightness" name="brightness" min="0" max="1" step="0.01" value="0.5">
+		<span id="brightnessValue">0.5</span>
+	</div>
+	<div>
+		<label for="contrast">Contrast:</label>
+		<input type="range" id="contrast" name="contrast" min="0" max="1" step="0.01" value="0.5">
+		<span id="contrastValue">0.5</span>
+	</div>
+	<div>
+		<label for="gamma">Gamma:</label>
+		<input type="range" id="gamma" name="gamma" min="0" max="2" step="0.01" value="1">
+		<span id="gammaValue">1</span>
+	</div>
+	<div>
+		<label for="led_time">LED Time:</label>
+		<input type="range" id="led_time" name="led_time" min="1000" max="9333" step="1" value="1000">
+		<span id="led_timeValue">1000</span>
+	</div>
+
+	<div>
+		<label for="update_t_cur">Advance t_cur on each capture:</label>
+		<input type="checkbox" id="update_t_cur" name="update_t_cur">
+	</div>
+	<div>
+		<button id="submit">Submit</button>
+	</div>
+	
+	<div>
+		<img id="image" alt="image">
+	</div>
+
+	<script>
+		var ws = new WebSocket('ws://' + 'localhost' + ':8000' + '/ws');
+		ws.binaryType = 'blob'; // Set the binaryType to 'blob'
+		var throttle = false;
+		var nextIsImage = false;
+
+		ws.onopen = function (event) {
+			$('#submit').click();
+		};
+
+		ws.onmessage = function (event) {
+			if (nextIsImage && event.data instanceof Blob) {
+				var url = URL.createObjectURL(event.data);
+				document.getElementById('image').src = url;
+				throttle = false;
+				nextIsImage = false;
+			} else {
+				var data = JSON.parse(event.data);
+				if (data.image_response && data.image_response.image === 'next') {
+					nextIsImage = true;
+				}
+			}
+		};
+
+		$('#led_time').on('input', function () {
+			var sliderId = this.id;
+			var sliderValue = $(this).val();
+			$('#' + sliderId + 'Value').text(sliderValue);
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'LED_TIME': {
+						'value': parseInt($(this).val())
+					}
+				}));
+			}
+		});
+
+		$('#update_t_cur').on('change', function () {
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'update_t_cur_enable': {
+						'value': $(this).prop('checked')
+					}
+				}));
+			}
+		});
+
+		$('#submit').on('click', function () {
+			if (ws.readyState != WebSocket.OPEN) {
+				console.log('Websocket is not open');
+			} else {
+				ws.send(JSON.stringify({
+					'image_request': {
+						'brightness': $('#brightness').val(),
+						'contrast': $('#contrast').val(),
+						'gamma': $('#gamma').val()
+					}
+				}));
+			}
+		});
+
+		$('input[type=range]').on('input', function () {
+			var sliderId = this.id;
+			var sliderValue = $(this).val();
+			$('#' + sliderId + 'Value').text(sliderValue);
+			if (!throttle && ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'control_change': {
+						[this.id]: $(this).val()
+					}
+				}));
+				throttle = true;
+			}
+		});
+		// $(document).ready(function () {
+		// 	$('#submit').click();
+		// });
+
+		// window.onload = function () {
+		// 	$('#submit').click();
+		// };
+	</script>
+</body>
+
+</html>

@@ -25,6 +25,7 @@ class CameraServer:
 		self.cam = CameraController()
 		self.cam.set_cam_triggered()
 		self.active_connections = set()
+		self.update_t_cur_enable = False
 		self.initialize_display()
 
 	def initialize_display(self):
@@ -80,7 +81,8 @@ class CameraServer:
 		if height is None:
 			height = self.img_height
 		img = self.cam.capture_frame()
-		self.cam.update_t_cur()
+		if self.update_t_cur_enable:
+			self.cam.update_t_cur()
 		self.cam.update_wave()
 		img_bin = self.image_to_blob(img)
 
@@ -106,10 +108,18 @@ class CameraServer:
 					self.brightness = float(control_change.get('brightness', image_request.get('brightness', self.brightness)))
 					self.contrast = float(control_change.get('contrast', image_request.get('contrast', self.contrast)))
 					self.gamma = float(control_change.get('gamma', image_request.get('gamma', self.gamma)))
+     
+				if 'LED_TIME' in data:
+					LED_TIME = data.get('LED_TIME', {})
+					self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
+					self.cam.update_wave()
 
 				if 'image_request' in data:
 					image_request = data.get('image_request', {})
 					await self.send_captured_image(ws)
+     
+				if 'update_t_cur_enable' in data:
+					self.update_t_cur_enable = data.get('update_t_cur_enable', {}).get('value', False)
 
 				if data.get('SLM_image', '') == 'next':
 					image_blob = await ws.receive_bytes()
@@ -125,7 +135,7 @@ class CameraServer:
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
 		if request.path == '/':
-			file_path = os.path.join(script_dir, 'vanilla.html')
+			file_path = os.path.join(script_dir, 'combo.html')
 		else:
 			file_path = os.path.join(script_dir, request.path.lstrip('/'))
 		return web.FileResponse(file_path)
@@ -163,7 +173,6 @@ class CameraController:
 		self.dt = 8333 // 100
 		self.t_min = 1000
 		self.t_max = 8333 + self.t_min
-		self.t_cur = self.t_min
 		self.fps_logger = FrameRateMonitor(60)
 
 		# Now initialize the rest of the components that depend on the config
@@ -234,7 +243,7 @@ class CameraController:
 
 	def update_wave(self):
 		self.stop_wave()
-		self.set_delay(self.t_cur)
+		self.set_delay(self.config.LED_TIME)
 
 	def set_cam_triggered(self):
 		self.vidcap.control_set("exposure_auto_priority", 1)
@@ -243,9 +252,9 @@ class CameraController:
 		self.vidcap.control_set("exposure_auto_priority", 0)
 
 	def update_t_cur(self):
-		self.t_cur += self.dt
-		if self.t_cur > self.t_max:
-			self.t_cur = self.t_min
+		self.config.LED_TIME += self.dt
+		if self.config.LED_TIME > self.t_max:
+			self.config.LED_TIME = self.t_min
 
 	def main(self):
 		self.set_cam_triggered()
