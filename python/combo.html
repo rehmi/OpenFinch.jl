@@ -23,28 +23,13 @@
 		}
 
 		input[type=range] {
- 			width: 75%;
+ 			width:50%;
 		}
 	</style>
 </head>
 
 <body>
 	<h1>Image Viewer</h1>
-	<div>
-		<label for="brightness">Brightness:</label>
-		<input type="range" id="brightness" name="brightness" min="0" max="1" step="0.01" value="0.5">
-		<span id="brightness_Value">0.5</span>
-	</div>
-	<div>
-		<label for="contrast">Contrast:</label>
-		<input type="range" id="contrast" name="contrast" min="0" max="1" step="0.01" value="0.5">
-		<span id="contrast_Value">0.5</span>
-	</div>
-	<div>
-		<label for="gamma">Gamma:</label>
-		<input type="range" id="gamma" name="gamma" min="0" max="2" step="0.01" value="1">
-		<span id="gamma_Value">1</span>
-	</div>
 	<div>
 		<label for="LED_TIME">LED Time:</label>
 		<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
@@ -55,10 +40,13 @@
 		<label for="update_t_cur">Advance t_cur on each capture:</label>
 		<input type="checkbox" id="update_t_cur" name="update_t_cur">
 	</div>
-	<div>
-		<button id="submit">Submit</button>
-	</div>
 	
+	<div>
+		<label for="LED_WIDTH">LED Width:</label>
+		<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
+		<span id="LED_WIDTH_Value">0</span>
+	</div>
+
 	<div>
 		<img id="image" alt="image">
 	</div>
@@ -93,19 +81,6 @@
 			}
 		};
 
-		$('#LED_TIME').on('input', function () {
-			var sliderId = this.id;
-			var sliderValue = $(this).val();
-			$('#' + sliderId + '_Value').text(sliderValue);
-			if (ws.readyState == WebSocket.OPEN) {
-				ws.send(JSON.stringify({
-					'LED_TIME': {
-						'value': parseInt($(this).val())
-					}
-				}));
-			}
-		});
-
 		$('#update_t_cur').on('change', function () {
 			if (ws.readyState == WebSocket.OPEN) {
 				ws.send(JSON.stringify({
@@ -116,40 +91,37 @@
 			}
 		});
 
-		$('#submit').on('click', function () {
-			if (ws.readyState != WebSocket.OPEN) {
-				console.log('Websocket is not open');
-			} else {
-				ws.send(JSON.stringify({
-					'image_request': {
-						'brightness': $('#brightness').val(),
-						'contrast': $('#contrast').val(),
-						'gamma': $('#gamma').val()
-					}
-				}));
-			}
-		});
-
 		$('input[type=range]').on('input', function () {
 			var sliderId = this.id;
 			var sliderValue = $(this).val();
 			$('#' + sliderId + '_Value').text(sliderValue);
-			if (!throttle && ws.readyState == WebSocket.OPEN) {
+			if (ws.readyState == WebSocket.OPEN) {
 				ws.send(JSON.stringify({
-					'control_change': {
-						[this.id]: $(this).val()
+					[this.id] : {
+						'value': parseInt(sliderValue)
 					}
 				}));
-				throttle = true;
 			}
 		});
-		// $(document).ready(function () {
-		// 	$('#submit').click();
-		// });
+		
+		// function handleRangeInput(sliderId) {
+		// 	$('input[type=range][id=' + sliderId + ']').on('input', function () {
+		// 		var sliderValue = $(this).val();
+		// 		$('#' + sliderId + '_Value').text(sliderValue);
+		// 		if (ws.readyState == WebSocket.OPEN) {
+		// 			ws.send(JSON.stringify({
+		// 				[this.id]: {
+		// 					'value': parseInt(sliderValue)
+		// 				}
+		// 			}));
+		// 		}
+		// 	});
+		// }
 
-		// window.onload = function () {
-		// 	$('#submit').click();
-		// };
+		// Call the function for each control
+		// handleRangeInput('LED_TIME');
+		// handleRangeInput('LED_WIDTH');
+		// Add more calls as needed for other controls
 	</script>
 </body>
 

@@ -26,6 +26,7 @@ class CameraServer:
 		self.cam.set_cam_triggered()
 		self.active_connections = set()
 		self.update_t_cur_enable = False
+		self.monitor_index = 1
 		self.initialize_display()
 
 	def initialize_display(self):
@@ -55,10 +56,6 @@ class CameraServer:
 				await asyncio.sleep(0.001)
 			except Exception as e:
 				logging.info(f"periodic_task(): got exception {e}")
-
-	def create_random_image(self, width=1600, height=1200):
-		img = Image.fromarray(np.random.randint(0, 256, (height, width, 3), dtype=np.uint8))
-		return img
 
 	def enhance_image(self, img, brightness, contrast, gamma):
 		enhancer = ImageEnhance.Brightness(img)
@@ -112,16 +109,25 @@ class CameraServer:
 			if msg.type == web.WSMsgType.TEXT:
 				data = json.loads(msg.data)
 
-				if 'control_change' in data:
-					control_change = data.get('control_change', {})
-					self.brightness = float(control_change.get('brightness', image_request.get('brightness', self.brightness)))
-					self.contrast = float(control_change.get('contrast', image_request.get('contrast', self.contrast)))
-					self.gamma = float(control_change.get('gamma', image_request.get('gamma', self.gamma)))
+				handlers = {
+					'LED_TIME': lambda data: self.handle_led_time(data),
+					'LED_WIDTH': lambda data: self.handle_led_width(data)
+					# Add more handlers as needed for other controls
+				}
+				
+				for key, handler in handlers.items():
+					if key in data:
+						await handler(data[key])
+
+				# if 'LED_TIME' in data:
+				# 	LED_TIME = data.get('LED_TIME', {})
+				# 	self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
+				# 	self.cam.update_wave()
      
-				if 'LED_TIME' in data:
-					LED_TIME = data.get('LED_TIME', {})
-					self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
-					self.cam.update_wave()
+				# if 'LED_WIDTH' in data:
+				# 	LED_WIDTH = data.get('LED_WIDTH', {})
+				# 	self.cam.config.LED_WIDTH = int(LED_WIDTH.get('value', self.cam.config.LED_WIDTH))
+				# 	self.cam.update_wave()
 
 				if 'image_request' in data:
 					image_request = data.get('image_request', {})
@@ -132,14 +138,21 @@ class CameraServer:
 
 				if data.get('SLM_image', '') == 'next':
 					image_blob = await ws.receive_bytes()
-					logging.info(f"SLM_image received {len(image_blob)} bytes")
+					# logging.info(f"SLM_image received {len(image_blob)} bytes")
 					img = Image.open(BytesIO(image_blob))
-					logging.info(f"img has type {type(img)} and size {img.size}")
-					self.display.move_to_monitor(1)
+					# logging.info(f"img has type {type(img)} and size {img.size}")
+					self.display.move_to_monitor(self.monitor_index)
 					self.update_display(img)
-
 		self.active_connections.remove(ws)
 		return ws
+
+	async def handle_led_time(self, LED_TIME):
+		self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
+		self.cam.update_wave()
+
+	async def handle_led_width(self, LED_WIDTH):
+		self.cam.config.LED_WIDTH = int(LED_WIDTH.get('value', self.cam.config.LED_WIDTH))
+		self.cam.update_wave()
 	
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
