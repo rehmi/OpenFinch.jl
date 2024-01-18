@@ -72,6 +72,10 @@ class CameraServer:
 		encodedImage.seek(0)
 		return encodedImage.read()
 
+	async def send_str_and_bytes(self, ws, str_data, bytes_data):
+		await ws.send_str(str_data)
+		await ws.send_bytes(bytes_data)
+
 	async def send_captured_image(self, width=None, height=None):
 		if width is None:
 			width = self.img_width
@@ -83,14 +87,16 @@ class CameraServer:
 			await self.update_led_time(self.cam.config.LED_TIME)
 		self.cam.update_wave()
 		img_bin = self.image_to_blob(img)
-
+  
+		tasks = []
 		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
 			try:
-				await ws.send_str(json.dumps({'image_response': {'image': 'next'}}))
-				await ws.send_bytes(img_bin)
+				tasks.append(self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin))
 			except Exception as e:
 				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
 				self.active_connections.remove(ws)
+
+		await asyncio.gather(*tasks)
 
 	async def update_led_time(self, new_value):
 		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
@@ -112,7 +118,7 @@ class CameraServer:
 				handlers = {
 					'LED_TIME': lambda data: self.handle_led_time(data),
 					'LED_WIDTH': lambda data: self.handle_led_width(data),
-        			'image_request': lambda data: self.handle_image_request(data),
+        			'image_request': lambda data: self.handle_image_request(data, ws),
    					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data)
 					# Add more handlers as needed for other controls
 				}
@@ -131,7 +137,7 @@ class CameraServer:
 		self.active_connections.remove(ws)
 		return ws
 
-	async def handle_image_request(self, image_request):
+	async def handle_image_request(self, image_request, ws):
 		await self.send_captured_image(ws)
 
 	async def handle_update_t_cur_enable(self, update_t_cur_enable):

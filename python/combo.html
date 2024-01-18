@@ -52,7 +52,9 @@
 	</div>
 
 	<script>
-		var ws = new WebSocket('ws://' + 'localhost' + ':8000' + '/ws');
+		var host = window.location.hostname;
+		var port = window.location.port;
+		var ws = new WebSocket('ws://' + host + ':' + port + '/ws');
 		ws.binaryType = 'blob'; // Set the binaryType to 'blob'
 		var throttle = false;
 		var nextIsImage = false;
