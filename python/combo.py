@@ -111,30 +111,15 @@ class CameraServer:
 
 				handlers = {
 					'LED_TIME': lambda data: self.handle_led_time(data),
-					'LED_WIDTH': lambda data: self.handle_led_width(data)
+					'LED_WIDTH': lambda data: self.handle_led_width(data),
+        			'image_request': lambda data: self.handle_image_request(data),
+   					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data)
 					# Add more handlers as needed for other controls
 				}
 				
 				for key, handler in handlers.items():
 					if key in data:
 						await handler(data[key])
-
-				# if 'LED_TIME' in data:
-				# 	LED_TIME = data.get('LED_TIME', {})
-				# 	self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
-				# 	self.cam.update_wave()
-     
-				# if 'LED_WIDTH' in data:
-				# 	LED_WIDTH = data.get('LED_WIDTH', {})
-				# 	self.cam.config.LED_WIDTH = int(LED_WIDTH.get('value', self.cam.config.LED_WIDTH))
-				# 	self.cam.update_wave()
-
-				if 'image_request' in data:
-					image_request = data.get('image_request', {})
-					await self.send_captured_image(ws)
-     
-				if 'update_t_cur_enable' in data:
-					self.update_t_cur_enable = data.get('update_t_cur_enable', {}).get('value', False)
 
 				if data.get('SLM_image', '') == 'next':
 					image_blob = await ws.receive_bytes()
@@ -145,6 +130,12 @@ class CameraServer:
 					self.update_display(img)
 		self.active_connections.remove(ws)
 		return ws
+
+	async def handle_image_request(self, image_request):
+		await self.send_captured_image(ws)
+
+	async def handle_update_t_cur_enable(self, update_t_cur_enable):
+		self.update_t_cur_enable = update_t_cur_enable.get('value', False)
 
 	async def handle_led_time(self, LED_TIME):
 		self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
