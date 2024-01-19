@@ -37,7 +37,7 @@ class StatsMonitor():
            self._flush_data()
 
    def _print_summary(self):
-       print(f"Summary Statistics for {self.label}: N: {len(self.data_points)} mean: {1/statistics.mean(self.data_points)} median: {1/statistics.median(self.data_points)}")
+       logging.info(f"{self.label} fps mean={1/statistics.mean(self.data_points):.2f}   median={1/statistics.median(self.data_points):.2f}    n={len(self.data_points)}")
 
    def _flush_data(self):
        self.data_points = []
@@ -52,6 +52,7 @@ class CameraServer:
 		self.active_connections = set()
 		self.update_t_cur_enable = False
 		self.monitor_index = 1
+		self.jpeg_quality = 75
 		self.capture_stats = StatsMonitor("cam.capture")
 		self.initialize_display()
 
@@ -79,7 +80,7 @@ class CameraServer:
 	async def periodic_task(self):
 		while True:
 			try:
-				await self.send_captured_image()
+				await self.send_captured_image(quality=self.jpeg_quality)
 				await asyncio.sleep(0.010)
 			except Exception as e:
 				logging.info(f"periodic_task(): got exception {e}")
@@ -92,10 +93,10 @@ class CameraServer:
 		img = enhancer.enhance(contrast)
 		return img
 
-	def image_to_blob(self, img):
+	def image_to_blob(self, img, quality):
 		encodedImage = BytesIO()
 		img = ImageOps.grayscale(Image.fromarray(img))
-		img.save(encodedImage, 'JPEG', quality=10)
+		img.save(encodedImage, 'JPEG', quality=quality)
 		encodedImage.seek(0)
 		return encodedImage.read()
 
@@ -107,7 +108,7 @@ class CameraServer:
 			logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
 			self.active_connections.remove(ws)
 
-	async def send_captured_image(self, width=None, height=None):
+	async def send_captured_image(self, width=None, height=None, quality=75):
 		if width is None:
 			width = self.img_width
 		if height is None:
@@ -120,11 +121,9 @@ class CameraServer:
 				self.cam.update_t_cur()
 				await self.update_led_time(self.cam.config.LED_TIME)
 			self.cam.update_wave()
-			img_bin = self.image_to_blob(img)
-	
+			img_bin = self.image_to_blob(img, quality)
 			tasks = [self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
-						for ws in list(self.active_connections)]  # Create a copy of the set to avoid modifying it while iterating
-
+							for ws in list(self.active_connections)] # Create a copy of the set to avoid modifying it while iterating
 			await asyncio.gather(*tasks)
 
 	async def update_led_time(self, new_value):
@@ -143,12 +142,15 @@ class CameraServer:
 		async for msg in ws:
 			if msg.type == web.WSMsgType.TEXT:
 				data = json.loads(msg.data)
+    
+				# logging.info(f"got msg {msg}")
 
 				handlers = {
 					'LED_TIME': lambda data: self.handle_led_time(data),
 					'LED_WIDTH': lambda data: self.handle_led_width(data),
         			'image_request': lambda data: self.handle_image_request(data, ws),
-   					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data)
+   					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data),
+					'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data)
 					# Add more handlers as needed for other controls
 				}
 				
@@ -163,11 +165,14 @@ class CameraServer:
 					# logging.info(f"img has type {type(img)} and size {img.size}")
 					self.display.move_to_monitor(self.monitor_index)
 					self.update_display(img)
+		
 		self.active_connections.remove(ws)
-		return ws
 
 	async def handle_image_request(self, image_request, ws):
-		await self.send_captured_image(ws)
+		# XXX this used to work but now that send_captured_image()
+		# broadcasts to all connections we need to refactor it
+		# await self.send_captured_image(ws)
+  		return
 
 	async def handle_update_t_cur_enable(self, update_t_cur_enable):
 		self.update_t_cur_enable = update_t_cur_enable.get('value', False)
@@ -180,6 +185,9 @@ class CameraServer:
 		self.cam.config.LED_WIDTH = int(LED_WIDTH.get('value', self.cam.config.LED_WIDTH))
 		self.cam.update_wave()
 	
+	async def handle_jpeg_quality(self, jpeg_quality):
+		self.jpeg_quality = int(jpeg_quality.get('value', 10))
+		
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
 		if request.path == '/':
@@ -218,7 +226,7 @@ class CameraController:
 		self.config.LED_TIME = 1000
 		self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
 
-		self.dt = 8333 // 100
+		self.dt = 8333 // 333
 		self.t_min = 1000
 		self.t_max = 8333 + self.t_min
 		self.fps_logger = FrameRateMonitor(10)
