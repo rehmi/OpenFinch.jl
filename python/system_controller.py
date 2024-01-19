@@ -8,7 +8,7 @@ import logging
 import os
 import pigpio
 
-class CameraController:
+class SystemController:
 	def __init__(self):
 		# Initialize the configuration first
 		self.config = TriggerConfig()
@@ -21,7 +21,7 @@ class CameraController:
 		self.dt = 8333 // 333
 		self.t_min = 1000
 		self.t_max = 8333 + self.t_min
-		self.fps_logger = FrameRateMonitor(10)
+		self.fps_logger = FrameRateMonitor("SystemController", 5)
 
 		# Now initialize the rest of the components that depend on the config
 		self.pig = start_pig()
@@ -46,24 +46,28 @@ class CameraController:
 		try:
 			self.display.close()
 		except Exception as e:
-			logging.info(f"CameraController shutting down display: {e}")
+			# logging.info(f"CameraController shutting down display: {e}")
+   			pass
 		try:
 			self.vidcap.close()
 		except Exception as e:
-			logging.info(f"CameraController shutting down vidcap: {e}")
+			# logging.info(f"CameraController shutting down vidcap: {e}")
+   			pass
 		try:
 			self.script.stop()
 			self.script.delete()
 		except Exception as e:
-			logging.info(f"CameraController shutting down script: {e}")
+			# logging.info(f"CameraController shutting down script: {e}")
+   			pass
 		try:
 			self.wave.delete()
 		except Exception as e:
-			logging.info(f"CameraController shutting down wave: {e}")
+			# logging.info(f"CameraController shutting down wave: {e}")
+   			pass
 
 	def capture_frame(self, timeout=0):
+		self.fps_logger.update()
 		if timeout <= 0:
-			self.fps_logger.update()
 			return self.vidcap.capture_frame()
 		else:
 			result = [None]
@@ -77,7 +81,6 @@ class CameraController:
 			if thread.is_alive():
 				return None
 			else:
-				self.fps_logger.update()
 				return result[0]
 
 	def stop_wave(self):

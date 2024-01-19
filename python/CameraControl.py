@@ -45,10 +45,10 @@ class TriggerConfig:
 	TRIG_OUT: int = TRIG_OUT
 	
 	TRIG_TIME: int = 0
-	TRIG_WIDTH: int = 50
-	LED_TIME: int = 5555
+	TRIG_WIDTH: int = 10
+	LED_TIME: int = 1000
 	LED_WIDTH: int = 20
-	WAVE_DURATION: int = 8333
+	WAVE_DURATION: int = 33400
 
 def preprocess_script(text):
 	# Split the script into lines

@@ -149,7 +149,7 @@ function trigger_wave_script(pig;
 	LED_OUT = 17,	
 	LED_WIDTH = 250,
 	STROBE_IN = 6,
-	WAVE_DURATION = 16_667,
+	WAVE_DURATION = 33400,
 	G1 = 23,
 	G2 = 27
 )

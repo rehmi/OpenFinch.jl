@@ -4,8 +4,11 @@ from screeninfo import get_monitors
 import v4l2py
 import time
 import os
+import logging
 import subprocess
 import threading
+import queue
+from frame_rate_monitor import FrameRateMonitor
 
 class ImageCapture:
 	def __init__(self, device_path='/dev/video0', capture_raw=False, controls={}):
@@ -25,36 +28,49 @@ class ImageCapture:
 		for control_name, value in controls.items():
 			self.control_set(control_name, value)
    
+		self.frame_queue = queue.Queue(maxsize=3)
 		self.last_frame = None
 		self.running = False
+		self.reader_fps = FrameRateMonitor("ImageCapture reader", 5)
+		self.capture_fps = FrameRateMonitor("ImageCapture capture", 5)
   
 	def _start_reader(self):
 		self.running = True
 		self.thread = threading.Thread(target=self._read_frames)
 		self.thread.start()
 
+	def _next_frame(self):
+		frame = next(self.iter_video)
+		if self.capture_raw:
+			img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
+		else:
+			img = np.frombuffer(frame.data, dtype=np.uint8)
+			img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+		return img
+
 	def _read_frames(self):
 		while self.running:
-			frame = next(self.iter_video)
-			if self.capture_raw:
-				img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
-			else:
-				img = np.frombuffer(frame.data, dtype=np.uint8)
-				img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+			self.last_frame = self._next_frame()
+			self.reader_fps.update()
+			if not self.frame_queue.full():
+				self.frame_queue.put(self.last_frame)
 
-			self.last_frame = img
+	def capture_frame(self, blocking=True):
+		if not blocking and self.frame_queue.empty():
+			return None
+		else:
+			self.capture_fps.update()
+			return self.frame_queue.get()
+		# return self._next_frame()
+		# return self.last_frame
 
-	def capture_frame(self):
-		return self.last_frame
-
-	import time
- 
 	def _time_video_iter(self, N=100):
 		tic = time.time()
 		for _ in range(N):
 			next(self.iter_video)
 		toc = time.time()
-		print(f"video capture rate measured to be {N/(toc-tic):.2f} fps")
+		fps = N/(toc-tic)
+		logging.info(f"video capture rate measured to be {fps:.2f} fps")
 
 	def _stop_reader(self):
 		self.running = False

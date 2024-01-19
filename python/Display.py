@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from screeninfo import get_monitors
 import os
+import logging
 import requests
 
 class Display:
@@ -23,7 +24,7 @@ class Display:
 			cv2.moveWindow(self.window_name, monitor.x, monitor.y)
 			cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 		else:
-			print(f"Not enough monitors detected. Make sure you have at least {self.monitor_index + 1} monitors connected.")
+			logging.info(f"Not enough monitors detected. Make sure you have at least {self.monitor_index + 1} monitors connected.")
 
 	def set_image_url(self, url):
 		response = requests.get(url)

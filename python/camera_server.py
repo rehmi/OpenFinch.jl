@@ -8,20 +8,18 @@ import numpy as np
 from io import BytesIO
 from aiohttp import web
 import os
-from stats_monitor import StatsMonitor
-from camera_controller import CameraController
+from system_controller import SystemController
 
 class CameraServer:
 	def __init__(self):
 		self.brightness, self.contrast, self.gamma = (0.5, 0.5, 1.0)
 		self.img_height, self.img_width = 1200, 1600
-		self.cam = CameraController()
+		self.cam = SystemController()
 		self.cam.set_cam_triggered()
 		self.active_connections = set()
 		self.update_t_cur_enable = False
 		self.monitor_index = 1
 		self.jpeg_quality = 75
-		self.capture_stats = StatsMonitor("cam.capture")
 		self.initialize_display()
 
 	def initialize_display(self):
@@ -79,9 +77,7 @@ class CameraServer:
 			width = self.img_width
 		if height is None:
 			height = self.img_height
-		start = time.time()
 		img = self.cam.capture_frame()
-		self.capture_stats.add_point(time.time() - start)
 		if img is not None:
 			if self.update_t_cur_enable:
 				self.cam.update_t_cur()
@@ -139,7 +135,7 @@ class CameraServer:
 		# XXX this used to work but now that send_captured_image()
 		# broadcasts to all connections we need to refactor it
 		# await self.send_captured_image(ws)
-  		return
+		return
 
 	async def handle_update_t_cur_enable(self, update_t_cur_enable):
 		self.update_t_cur_enable = update_t_cur_enable.get('value', False)

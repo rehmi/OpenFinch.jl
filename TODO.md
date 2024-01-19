@@ -2,7 +2,10 @@
 
 ## combo.py:
 
-- [x] set secondary monitor image over WS
 - [ ] add messages to set camera imaging controls
-- [ ] add messages to set controller timing
+- [~] add messages to set controller timing
+- [ ] improve concurrency via threading and queues
+- [ ] keep track of all frame data and metadata (e.g. timestamps, original MJPG data)
+
+- [x] set secondary monitor image over WS
 - [x] track open websockets for updates
