@@ -14,7 +14,7 @@ class CameraController:
 		self.config = TriggerConfig()
 		self.config.TRIG_WIDTH = 10
 		self.config.LED_WIDTH = 20
-		self.config.WAVE_DURATION = 40000
+		self.config.WAVE_DURATION = 33400
 		self.config.LED_TIME = 1000
 		self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
 

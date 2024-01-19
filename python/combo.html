@@ -31,23 +31,29 @@
 <body>
 	<h1>Image Viewer</h1>
 	<div>
-		<label for="LED_TIME">LED Time:</label>
+		<label for="update_t_cur">Advance t_cur on each capture:</label>
+		<input type="checkbox" id="update_t_cur" name="update_t_cur">
+	</div>
+
+	<div>
+		<label for="LED_TIME">LED time:</label>
 		<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
 		<span id="LED_TIME_Value">1000</span>
 	</div>
 
 	<div>
-		<label for="update_t_cur">Advance t_cur on each capture:</label>
-		<input type="checkbox" id="update_t_cur" name="update_t_cur">
+		<label for="WAVE_DURATION">Wave duration:</label>
+		<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="60000" step="100" value="40000">
+		<span id="WAVE_DURATION_Value">40000</span>
 	</div>
-	
+
 	<div>
 		<label for="LED_WIDTH">LED Width:</label>
 		<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
 		<span id="LED_WIDTH_Value">20</span>
 	</div>
 	<div>
-		<label for="JPEG_QUALITY">JPEG Quality:</label>
+		<label for="JPEG_QUALITY">JPEG quality:</label>
 		<input type="range" id="JPEG_QUALITY" name="JPEG_QUALITY" min="0" max="100" step="1" value="25">
 		<span id="JPEG_QUALITY_Value">25</span>
 	</div>

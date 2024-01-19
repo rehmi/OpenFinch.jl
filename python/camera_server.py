@@ -114,6 +114,7 @@ class CameraServer:
 				handlers = {
 					'LED_TIME': lambda data: self.handle_led_time(data),
 					'LED_WIDTH': lambda data: self.handle_led_width(data),
+					'WAVE_DURATION': lambda data: self.handle_wave_duration(data),
         			'image_request': lambda data: self.handle_image_request(data, ws),
    					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data),
 					'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data)
@@ -154,6 +155,10 @@ class CameraServer:
 	async def handle_jpeg_quality(self, jpeg_quality):
 		self.jpeg_quality = int(jpeg_quality.get('value', 10))
 		
+	async def handle_wave_duration(self, duration):
+		self.cam.config.WAVE_DURATION = int(duration.get('value', self.cam.config.WAVE_DURATION))
+		self.cam.update_wave()
+ 
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
 		if request.path == '/':
