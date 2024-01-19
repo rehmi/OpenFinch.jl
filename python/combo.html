@@ -65,8 +65,13 @@
 
 		ws.onmessage = function (event) {
 			if (nextIsImage && event.data instanceof Blob) {
+				var imgElement = document.getElementById('image');
+				if (imgElement.src !== '') {
+					// console.log('Revoke blob URL:', imgElement.src); // Revoke the old object URL
+					URL.revokeObjectURL(imgElement.src); // Revoke the old object URL
+				}
 				var url = URL.createObjectURL(event.data);
-				document.getElementById('image').src = url;
+				imgElement.src = url;
 				throttle = false;
 				nextIsImage = false;
 			} else {

@@ -18,6 +18,31 @@ import os
 import pigpio
 import numpy as np
 
+import gc
+# gc.set_debug(gc.DEBUG_LEAK | gc.DEBUG_STATS)
+
+import statistics
+
+class StatsMonitor():
+   def __init__(self, label, flush_interval=10):
+       self.label = label
+       self.data_points = []
+       self.flush_interval = flush_interval
+       self.last_flush_time = time.time()
+
+   def add_point(self, value):
+       self.data_points.append(value)
+       if time.time() - self.last_flush_time >= self.flush_interval:
+           self._print_summary()
+           self._flush_data()
+
+   def _print_summary(self):
+       print(f"Summary Statistics for {self.label}: N: {len(self.data_points)} mean: {1/statistics.mean(self.data_points)} median: {1/statistics.median(self.data_points)}")
+
+   def _flush_data(self):
+       self.data_points = []
+       self.last_flush_time = time.time()
+
 class CameraServer:
 	def __init__(self):
 		self.brightness, self.contrast, self.gamma = (0.5, 0.5, 1.0)
@@ -27,6 +52,7 @@ class CameraServer:
 		self.active_connections = set()
 		self.update_t_cur_enable = False
 		self.monitor_index = 1
+		self.capture_stats = StatsMonitor("cam.capture")
 		self.initialize_display()
 
 	def initialize_display(self):
@@ -48,12 +74,13 @@ class CameraServer:
 	async def on_startup(self, app):
 		app['task'] = asyncio.create_task(self.periodic_task())
 
+	import time
+
 	async def periodic_task(self):
 		while True:
 			try:
-				# logging.info("periodic_task executed")
 				await self.send_captured_image()
-				await asyncio.sleep(0.001)
+				await asyncio.sleep(0.010)
 			except Exception as e:
 				logging.info(f"periodic_task(): got exception {e}")
 
@@ -67,36 +94,38 @@ class CameraServer:
 
 	def image_to_blob(self, img):
 		encodedImage = BytesIO()
-		img = Image.fromarray(img)
-		img.save(encodedImage, 'JPEG')
+		img = ImageOps.grayscale(Image.fromarray(img))
+		img.save(encodedImage, 'JPEG', quality=10)
 		encodedImage.seek(0)
 		return encodedImage.read()
 
 	async def send_str_and_bytes(self, ws, str_data, bytes_data):
-		await ws.send_str(str_data)
-		await ws.send_bytes(bytes_data)
+		try:
+			await ws.send_str(str_data)
+			await ws.send_bytes(bytes_data)
+		except Exception as e:
+			logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
+			self.active_connections.remove(ws)
 
 	async def send_captured_image(self, width=None, height=None):
 		if width is None:
 			width = self.img_width
 		if height is None:
 			height = self.img_height
+		start = time.time()
 		img = self.cam.capture_frame()
-		if self.update_t_cur_enable:
-			self.cam.update_t_cur()
-			await self.update_led_time(self.cam.config.LED_TIME)
-		self.cam.update_wave()
-		img_bin = self.image_to_blob(img)
-  
-		tasks = []
-		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
-			try:
-				tasks.append(self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin))
-			except Exception as e:
-				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
-				self.active_connections.remove(ws)
+		self.capture_stats.add_point(time.time() - start)
+		if img is not None:
+			if self.update_t_cur_enable:
+				self.cam.update_t_cur()
+				await self.update_led_time(self.cam.config.LED_TIME)
+			self.cam.update_wave()
+			img_bin = self.image_to_blob(img)
+	
+			tasks = [self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
+						for ws in list(self.active_connections)]  # Create a copy of the set to avoid modifying it while iterating
 
-		await asyncio.gather(*tasks)
+			await asyncio.gather(*tasks)
 
 	async def update_led_time(self, new_value):
 		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
@@ -192,7 +221,7 @@ class CameraController:
 		self.dt = 8333 // 100
 		self.t_min = 1000
 		self.t_max = 8333 + self.t_min
-		self.fps_logger = FrameRateMonitor(60)
+		self.fps_logger = FrameRateMonitor(10)
 
 		# Now initialize the rest of the components that depend on the config
 		self.pig = start_pig()
@@ -295,8 +324,6 @@ if __name__ == "__main__":
         # Attach the startup handler
 		app.on_startup.append(server.on_startup)
 		web.run_app(app, host='0.0.0.0', port=8000)
-		# main_obj = CameraController()
-		# main_obj.main()
 	except KeyboardInterrupt:
 		logging.info("Ctrl-C pressed. Bailing out")
 	finally:
