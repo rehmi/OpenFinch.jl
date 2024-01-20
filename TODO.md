@@ -7,5 +7,6 @@
 - [ ] improve concurrency via threading and queues
 - [ ] keep track of all frame data and metadata (e.g. timestamps, original MJPG data)
 
+- [x] make a python module
 - [x] set secondary monitor image over WS
 - [x] track open websockets for updates

@@ -1,12 +1,13 @@
 import time
-from ImageCapture import ImageCapture
-from CameraControl import start_pig, trigger_wave_script, TriggerConfig
-from CameraControl import PiGPIOScript, PiGPIOWave, CameraControlDefaults
-from frame_rate_monitor import FrameRateMonitor
 import threading
 import logging
 import os
 import pigpio
+
+from .ImageCapture import ImageCapture
+from .CameraControl import start_pig, trigger_wave_script, TriggerConfig
+from .CameraControl import PiGPIOScript, PiGPIOWave, CameraControlDefaults
+from .frame_rate_monitor import FrameRateMonitor
 
 class SystemController:
 	def __init__(self):

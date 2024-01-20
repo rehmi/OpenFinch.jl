@@ -1,5 +1,4 @@
 import time
-from Display import Display
 import logging
 import asyncio
 import json
@@ -8,7 +7,9 @@ import numpy as np
 from io import BytesIO
 from aiohttp import web
 import os
-from system_controller import SystemController
+
+from .Display import Display
+from .system_controller import SystemController
 
 class CameraServer:
 	def __init__(self):

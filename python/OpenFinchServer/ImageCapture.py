@@ -8,7 +8,7 @@ import logging
 import subprocess
 import threading
 import queue
-from frame_rate_monitor import FrameRateMonitor
+from .frame_rate_monitor import FrameRateMonitor
 
 class ImageCapture:
 	def __init__(self, device_path='/dev/video0', capture_raw=False, controls={}):

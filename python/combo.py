@@ -1,7 +1,7 @@
 import logging
 from aiohttp import web
 
-from camera_server import CameraServer
+from OpenFinchServer import *
 
 if __name__ == "__main__":
 	try:
