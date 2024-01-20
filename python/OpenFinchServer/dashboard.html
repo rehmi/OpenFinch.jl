@@ -77,6 +77,12 @@
 		<span id="LED_WIDTH_Value">20</span>
 	</div>
 
+	<div>
+		<p>Image Capture Reader FPS: <span id="image_capture_reader_fps">0</span></p>
+		<p>Image Capture Capture FPS: <span id="image_capture_capture_fps">0</span></p>
+		<p>System Controller FPS: <span id="system_controller_fps">0</span></p>
+	</div>
+
 	<!--
 		Here's is a list of OV2311 v4l2 controls:
 
@@ -223,13 +229,28 @@
 				var data = JSON.parse(event.data);
 				if (data.image_response && data.image_response.image === 'next') {
 					nextIsImage = true;
+				} else {
+					console.log(data);
 				}
-				// if ('LED_TIME' in data) {
+
 				if (data.LED_TIME) {
 					var newValue = data.LED_TIME.value;
 					$('#LED_TIME').val(newValue);
 					$('#LED_TIME_Value').text(newValue);
 				}
+
+				if (data.fps_update) {
+					if (data.fps_update.image_capture_reader_fps !== undefined) {
+						document.getElementById('image_capture_reader_fps').textContent = data.fps_update.image_capture_reader_fps.toFixed(2);
+					}
+					if (data.fps_update.image_capture_capture_fps !== undefined) {
+						document.getElementById('image_capture_capture_fps').textContent = data.fps_update.image_capture_capture_fps.toFixed(2);
+					}
+					if (data.fps_update.system_controller_fps !== undefined) {
+						document.getElementById('system_controller_fps').textContent = data.fps_update.system_controller_fps.toFixed(2);
+					}
+				}
+
 			}
 		};
 

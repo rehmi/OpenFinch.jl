@@ -38,6 +38,21 @@ class CameraServer:
 		self.display.set_image(img_array)
 		self.display.display_image()
 		self.display.update()
+  
+	async def send_fps_update(self):
+		try:
+			fps_data = {
+				'image_capture_reader_fps': self.cam.vidcap.reader_fps.get_fps(),
+				'image_capture_capture_fps': self.cam.vidcap.capture_fps.get_fps(),
+				'system_controller_fps': self.cam.fps_logger.get_fps()
+			}
+			# fps_data = {k: v for k, v in fps_data.items() if v is not None}
+			if fps_data:
+				tasks = [ws.send_str(json.dumps({'fps_update': fps_data}))
+							for ws in list(self.active_connections)]
+				await asyncio.gather(*tasks)
+		except Exception as e:
+			logging.exception("Exception in send_fps_update")
 
 	async def on_startup(self, app):
 		app['task'] = asyncio.create_task(self.periodic_task())
@@ -46,7 +61,8 @@ class CameraServer:
 		while True:
 			try:
 				await self.send_captured_image(quality=self.jpeg_quality)
-				await asyncio.sleep(0.010)
+				await self.send_fps_update()
+				await asyncio.sleep(0.001)
 			except Exception as e:
 				logging.exception("Exception in periodic_task")
 				raise e
@@ -72,7 +88,10 @@ class CameraServer:
 			await ws.send_bytes(bytes_data)
 		except Exception as e:
 			logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
-			self.active_connections.remove(ws)
+			try:
+				self.active_connections.remove(ws)
+			except KeyError:
+				pass
 
 	async def send_captured_image(self, width=None, height=None, quality=75):
 		if width is None:
