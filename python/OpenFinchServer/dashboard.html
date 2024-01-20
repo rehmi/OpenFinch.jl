@@ -94,6 +94,76 @@
 		<span id="JPEG_QUALITY_Value">25</span>
 	</div>
 
+	<div>
+		<label for="brightness">Brightness:</label>
+		<input type="range" id="brightness" name="brightness" min="-64" max="64" step="1" value="0">
+		<span id="brightness_Value">0</span>
+	</div>
+	
+	<div>
+		<label for="contrast">Contrast:</label>
+		<input type="range" id="contrast" name="contrast" min="0" max="64" step="1" value="32">
+		<span id="contrast_Value">32</span>
+	</div>
+	
+	<div>
+		<label for="saturation">Saturation:</label>
+		<input type="range" id="saturation" name="saturation" min="0" max="128" step="1" value="0">
+		<span id="saturation_Value">0</span>
+	</div>
+	
+	<div>
+		<label for="hue">Hue:</label>
+		<input type="range" id="hue" name="hue" min="-40" max="40" step="1" value="1">
+		<span id="hue_Value">1</span>
+	</div>
+	
+	<div>
+		<label for="gamma">Gamma:</label>
+		<input type="range" id="gamma" name="gamma" min="72" max="500" step="1" value="100">
+		<span id="gamma_Value">100</span>
+	</div>
+	
+	<div>
+		<label for="gain">Gain:</label>
+		<input type="range" id="gain" name="gain" min="0" max="100" step="1" value="0">
+		<span id="gain_Value">0</span>
+	</div>
+	
+	<div>
+		<label for="power_line_frequency">Power Line Frequency:</label>
+		<select id="power_line_frequency" name="power_line_frequency">
+			<option value="0">Disabled</option>
+			<option value="1">50 Hz</option>
+			<option value="2">60 Hz</option>
+		</select>
+	</div>
+	
+	<div>
+		<label for="sharpness">Sharpness:</label>
+		<input type="range" id="sharpness" name="sharpness" min="0" max="6" step="1" value="6">
+		<span id="sharpness_Value">6</span>
+	</div>
+	
+	<div>
+		<label for="backlight_compensation">Backlight Compensation:</label>
+		<input type="range" id="backlight_compensation" name="backlight_compensation" min="0" max="2" step="1" value="0">
+		<span id="backlight_compensation_Value">0</span>
+	</div>
+	
+	<div>
+		<label for="exposure_auto">Exposure Auto:</label>
+		<select id="exposure_auto" name="exposure_auto">
+			<option value="1">Manual Mode</option>
+			<option value="3">Aperture Priority Mode</option>
+		</select>
+	</div>
+	
+	<div>
+		<label for="exposure_auto_priority">Exposure Auto Priority:</label>
+		<input type="checkbox" id="exposure_auto_priority" name="exposure_auto_priority">
+	</div>
+
 	<p>
 
 	<div>
@@ -171,6 +241,67 @@
 			}
 		});
 		
+		// Handle the 'power_line_frequency' control
+		$('#power_line_frequency').on('change', function () {
+			var frequency = $(this).val();
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'power_line_frequency': {
+						'value': frequency
+					}
+				}));
+			}
+		});
+
+		// Handle the 'sharpness' control
+		$('#sharpness').on('input', function () {
+			var sharpness = $(this).val();
+			$('#sharpness_Value').text(sharpness);
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'sharpness': {
+						'value': parseInt(sharpness)
+					}
+				}));
+			}
+		});
+
+		// Handle the 'backlight_compensation' control
+		$('#backlight_compensation').on('input', function () {
+			var compensation = $(this).val();
+			$('#backlight_compensation_Value').text(compensation);
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'backlight_compensation': {
+						'value': parseInt(compensation)
+					}
+				}));
+			}
+		});
+
+		// Handle the 'exposure_auto' control
+		$('#exposure_auto').on('change', function () {
+			var exposureAuto = $(this).val();
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'exposure_auto': {
+						'value': exposureAuto
+					}
+				}));
+			}
+		});
+
+		// Handle the 'exposure_auto_priority' control
+		$('#exposure_auto_priority').on('change', function () {
+			var priority = $(this).prop('checked') ? 1 : 0;
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({
+					'exposure_auto_priority': {
+						'value': priority
+					}
+				}));
+			}
+		});
 		// function handleRangeInput(sliderId) {
 		// 	$('input[type=range][id=' + sliderId + ']').on('input', function () {
 		// 		var sliderValue = $(this).val();

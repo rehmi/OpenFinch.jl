@@ -117,6 +117,17 @@ class CameraServer:
 					'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
 				    'camera_mode': lambda data: self.handle_camera_mode(data),
     				'exposure_absolute': lambda data: self.handle_exposure_absolute(data),
+					'brightness': lambda data: self.handle_brightness(data),
+					'contrast': lambda data: self.handle_contrast(data),
+					'saturation': lambda data: self.handle_saturation(data),
+					'hue': lambda data: self.handle_hue(data),
+					'gamma': lambda data: self.handle_gamma(data),
+					'gain': lambda data: self.handle_gain(data),
+					'power_line_frequency': lambda data: self.handle_power_line_frequency(data),
+					'sharpness': lambda data: self.handle_sharpness(data),
+					'backlight_compensation': lambda data: self.handle_backlight_compensation(data),
+					'exposure_auto': lambda data: self.handle_exposure_auto(data),
+					'exposure_auto_priority': lambda data: self.handle_exposure_auto_priority(data),
 				}
 				
 				for key, handler in handlers.items():
@@ -165,6 +176,39 @@ class CameraServer:
 
 	async def handle_exposure_absolute(self, exposure_absolute):
 		self.cam.vidcap.control_set("exposure_absolute", int(exposure_absolute['value']))
+  
+	async def handle_brightness(self, brightness):
+		self.cam.vidcap.control_set("brightness", int(brightness['value']))
+
+	async def handle_contrast(self, contrast):
+		self.cam.vidcap.control_set("contrast", int(contrast['value']))
+
+	async def handle_saturation(self, saturation):
+		self.cam.vidcap.control_set("saturation", int(saturation['value']))
+
+	async def handle_hue(self, hue):
+		self.cam.vidcap.control_set("hue", int(hue['value']))
+
+	async def handle_gamma(self, gamma):
+		self.cam.vidcap.control_set("gamma", int(gamma['value']))
+
+	async def handle_gain(self, gain):
+		self.cam.vidcap.control_set("gain", int(gain['value']))
+
+	async def handle_power_line_frequency(self, power_line_frequency):
+		self.cam.vidcap.control_set("power_line_frequency", int(power_line_frequency['value']))
+
+	async def handle_sharpness(self, sharpness):
+		self.cam.vidcap.control_set("sharpness", int(sharpness['value']))
+
+	async def handle_backlight_compensation(self, backlight_compensation):
+		self.cam.vidcap.control_set("backlight_compensation", int(backlight_compensation['value']))
+
+	async def handle_exposure_auto(self, exposure_auto):
+		self.cam.vidcap.control_set("exposure_auto", int(exposure_auto['value']))
+
+	async def handle_exposure_auto_priority(self, exposure_auto_priority):
+		self.cam.vidcap.control_set("exposure_auto_priority", int(exposure_auto_priority['value']))
 
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
