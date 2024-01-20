@@ -114,8 +114,9 @@ class CameraServer:
 					'WAVE_DURATION': lambda data: self.handle_wave_duration(data),
         			'image_request': lambda data: self.handle_image_request(data, ws),
    					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data),
-					'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data)
-					# Add more handlers as needed for other controls
+					'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
+				    'camera_mode': lambda data: self.handle_camera_mode(data),
+    				'exposure_absolute': lambda data: self.handle_exposure_absolute(data),
 				}
 				
 				for key, handler in handlers.items():
@@ -156,10 +157,19 @@ class CameraServer:
 		self.cam.config.WAVE_DURATION = int(duration.get('value', self.cam.config.WAVE_DURATION))
 		self.cam.update_wave()
  
+	async def handle_camera_mode(self, camera_mode):
+		if camera_mode['value'] == 'freerunning':
+			self.cam.set_cam_freerunning()
+		else:
+			self.cam.set_cam_triggered()
+
+	async def handle_exposure_absolute(self, exposure_absolute):
+		self.cam.vidcap.control_set("exposure_absolute", int(exposure_absolute['value']))
+
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
 		if request.path == '/':
-			file_path = os.path.join(script_dir, 'combo.html')
+			file_path = os.path.join(script_dir, 'dashboard.html')
 		else:
 			file_path = os.path.join(script_dir, request.path.lstrip('/'))
 		return web.FileResponse(file_path)
