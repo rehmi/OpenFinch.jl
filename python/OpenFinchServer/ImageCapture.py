@@ -4,11 +4,43 @@ from screeninfo import get_monitors
 import v4l2py
 import time
 import os
+import io
 import logging
 import subprocess
 import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
+
+class CapturedImage:
+	def __init__(self, frame):
+		self.frame = frame
+		self.format = frame.pixel_format.name
+
+	def to_grayscale(self):
+		if self.format == 'YUYV':
+			# Convert YUYV raw data to grayscale
+			return cv2.cvtColor(np.frombuffer(self.frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
+		elif self.format == 'MJPEG':
+			# Decode MJPG data to grayscale
+			img = np.frombuffer(self.frame.data, dtype=np.uint8)
+			return cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+		else:
+			raise Exception(f"CapturedImage: unknown image format {self.format}")
+
+	def to_rgb(self):
+		if self.format == 'YUYV':
+			# Convert YUYV raw data to RGB
+			return cv2.cvtColor(np.frombuffer(self.frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2RGB_YUYV)
+
+		elif self.format == 'MJPEG':
+			# Decode MJPG data to RGB
+			img = np.frombuffer(self.frame.data, dtype=np.uint8)
+			return cv2.imdecode(img, cv2.IMREAD_COLOR)
+		else:
+			raise Exception(f"CapturedImage: unknown image format {self.format}")
+
+	def to_bytes(self):
+		return self.frame.data
 
 class ImageCapture:
 	def __init__(self, device_path='/dev/video0', capture_raw=False, controls={}):
@@ -24,15 +56,15 @@ class ImageCapture:
 			subprocess.call(['v4l2-ctl', '--set-fmt-video=width=1600,height=1200,pixelformat=MJPG'])
 		
 		self.device.open()
-  
+
 		for control_name, value in controls.items():
 			self.control_set(control_name, value)
-   
-		self.frame_queue = queue.Queue(maxsize=3)
+
+		self.frame_queue = queue.Queue(maxsize=1)
 		self.running = False
 		self.reader_fps = FrameRateMonitor("ImageCapture reader", 5)
 		self.capture_fps = FrameRateMonitor("ImageCapture capture", 5)
-  
+
 	def _start_reader(self):
 		self.running = True
 		self.thread = threading.Thread(target=self._read_frames)
@@ -51,12 +83,33 @@ class ImageCapture:
 		else:
 			self.capture_fps.update()
 			frame = self.frame_queue.get()
-			if self.capture_raw:
-				img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
-			else:
-				img = np.frombuffer(frame.data, dtype=np.uint8)
-				img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
-			return img
+			cap = CapturedImage(frame)
+			return cap
+
+	def capture_raw(self, blocking=True):
+			cap = self.capture_frame(blocking=blocking)
+			return cap.to_bytes()
+
+	def capture_rgb(self, blocking=True):
+			cap = self.capture_frame(blocking=blocking)
+			return cap.to_rgb()
+
+	def capture_grayscale(self, blocking=True):
+			cap = self.capture_frame(blocking=blocking)
+			return cap.to_grayscale()
+
+	# def capture_frame(self, blocking=True):
+	# 	if not blocking and self.frame_queue.empty():
+	# 		return None
+	# 	else:
+	# 		self.capture_fps.update()
+	# 		frame = self.frame_queue.get()
+	# 		if self.capture_raw:
+	# 			img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
+	# 		else:
+	# 			img = np.frombuffer(frame.data, dtype=np.uint8)
+	# 			img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+	# 		return img
 
 		# return self._next_frame()
 		# return self.last_frame
@@ -82,7 +135,7 @@ class ImageCapture:
 		self._stop_reader()
 		self.video.close()
 		# self.device.close()
-  
+
 	def __del__(self):
 		self.device.close()
 	

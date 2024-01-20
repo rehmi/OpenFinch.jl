@@ -107,11 +107,4 @@ class SystemController:
 		self.config.LED_TIME += self.dt
 		if self.config.LED_TIME > self.t_max:
 			self.config.LED_TIME = self.t_min
-
-	def main(self):
-		self.set_cam_triggered()
-		self.fps_logger.reset()
-		while True:
-			self.process_frame()
-			self.update_t_cur()
-			self.fps_logger.update()   
+   

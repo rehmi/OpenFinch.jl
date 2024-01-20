@@ -3,7 +3,7 @@ from .CameraControl import CameraControlDefaults, ScriptStatus, TriggerConfig, P
 from .camera_server import CameraServer
 from .Display import Display
 from .frame_rate_monitor import FrameRateMonitor, StatsMonitor
-from .ImageCapture import ImageCapture
+from .ImageCapture import CapturedImage, ImageCapture
 from .system_controller import SystemController
 
 
@@ -18,6 +18,7 @@ __all__ = [
 	'Display',
 	'FrameRateMonitor',
  	'StatsMonitor',
+	'CapturedImage',
 	'ImageCapture',
 	'SystemController',
 ]

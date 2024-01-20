@@ -48,7 +48,8 @@ class CameraServer:
 				await self.send_captured_image(quality=self.jpeg_quality)
 				await asyncio.sleep(0.010)
 			except Exception as e:
-				logging.info(f"periodic_task(): got exception {e}")
+				logging.exception("Exception in periodic_task")
+				raise e
 
 	def enhance_image(self, img, brightness, contrast, gamma):
 		enhancer = ImageEnhance.Brightness(img)
@@ -78,13 +79,17 @@ class CameraServer:
 			width = self.img_width
 		if height is None:
 			height = self.img_height
-		img = self.cam.capture_frame()
-		if img is not None:
+		frame = self.cam.capture_frame()
+		if frame is not None:
 			if self.update_t_cur_enable:
 				self.cam.update_t_cur()
 				await self.update_led_time(self.cam.config.LED_TIME)
 			self.cam.update_wave()
-			img_bin = self.image_to_blob(img, quality)
+	
+			# img = frame.to_grayscale()
+			# img_bin = self.image_to_blob(img, quality)
+			img_bin = frame.to_bytes()
+   
 			tasks = [self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
 							for ws in list(self.active_connections)] # Create a copy of the set to avoid modifying it while iterating
 			await asyncio.gather(*tasks)
