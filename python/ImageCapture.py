@@ -29,7 +29,6 @@ class ImageCapture:
 			self.control_set(control_name, value)
    
 		self.frame_queue = queue.Queue(maxsize=3)
-		self.last_frame = None
 		self.running = False
 		self.reader_fps = FrameRateMonitor("ImageCapture reader", 5)
 		self.capture_fps = FrameRateMonitor("ImageCapture capture", 5)
@@ -39,28 +38,26 @@ class ImageCapture:
 		self.thread = threading.Thread(target=self._read_frames)
 		self.thread.start()
 
-	def _next_frame(self):
-		frame = next(self.iter_video)
-		if self.capture_raw:
-			img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
-		else:
-			img = np.frombuffer(frame.data, dtype=np.uint8)
-			img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
-		return img
-
 	def _read_frames(self):
 		while self.running:
-			self.last_frame = self._next_frame()
+			frame = next(self.iter_video)
 			self.reader_fps.update()
 			if not self.frame_queue.full():
-				self.frame_queue.put(self.last_frame)
+				self.frame_queue.put(frame)
 
 	def capture_frame(self, blocking=True):
 		if not blocking and self.frame_queue.empty():
 			return None
 		else:
 			self.capture_fps.update()
-			return self.frame_queue.get()
+			frame = self.frame_queue.get()
+			if self.capture_raw:
+				img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
+			else:
+				img = np.frombuffer(frame.data, dtype=np.uint8)
+				img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+			return img
+
 		# return self._next_frame()
 		# return self.last_frame
 

@@ -41,29 +41,29 @@ class SystemController:
 
 	def __del__(self):
 		self.shutdown()
-  
+
 	def shutdown(self):
 		try:
 			self.display.close()
 		except Exception as e:
 			# logging.info(f"CameraController shutting down display: {e}")
-   			pass
+			pass
 		try:
 			self.vidcap.close()
 		except Exception as e:
 			# logging.info(f"CameraController shutting down vidcap: {e}")
-   			pass
+			pass
 		try:
 			self.script.stop()
 			self.script.delete()
 		except Exception as e:
 			# logging.info(f"CameraController shutting down script: {e}")
-   			pass
+			pass
 		try:
 			self.wave.delete()
 		except Exception as e:
 			# logging.info(f"CameraController shutting down wave: {e}")
-   			pass
+			pass
 
 	def capture_frame(self, timeout=0):
 		self.fps_logger.update()
@@ -86,7 +86,7 @@ class SystemController:
 	def stop_wave(self):
 		self.script.set_params(0xffffffff) # deactivate the current wave
 		self.wave.delete()
-  
+
 	def set_delay(self, t_del):
 		self.config.LED_TIME = t_del
 		self.wave = PiGPIOWave(self.pig, self.config)

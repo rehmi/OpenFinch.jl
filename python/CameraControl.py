@@ -50,22 +50,10 @@ class TriggerConfig:
 	LED_WIDTH: int = 20
 	WAVE_DURATION: int = 33400
 
-def preprocess_script(text):
-	# Split the script into lines
-	lines = text.split('\n')
-	# Split each line at the first comment character, keeping the leading text
-	uncommented = [line.split('#')[0] for line in lines]
-	# Strip leading and trailing whitespace from each line
-	stripped = [line.strip() for line in uncommented]
-	# Keep only nonempty lines
-	nonempty = [line for line in stripped if line]
-	# Rejoin the nonempty lines into a single string
-	return '\n'.join(nonempty)
-
 class PiGPIOScript:
 	def __init__(self, pig, text=None, id=None):
 		if text is not None:
-			self.pptext = preprocess_script(text)
+			self.pptext = self.preprocess_script(text)
 			self.id = pig.store_script(self.pptext)
 		elif id is not None:
 			self.id = id
@@ -75,6 +63,18 @@ class PiGPIOScript:
 		self.text = text if text else ''
 		self.waves = []
 		# print(f"{self} created")
+
+	def preprocess_script(self, text):
+		# Split the script into lines
+		lines = text.split('\n')
+		# Split each line at the first comment character, keeping the leading text
+		uncommented = [line.split('#')[0] for line in lines]
+		# Strip leading and trailing whitespace from each line
+		stripped = [line.strip() for line in uncommented]
+		# Keep only nonempty lines
+		nonempty = [line for line in stripped if line]
+		# Rejoin the nonempty lines into a single string
+		return '\n'.join(nonempty)
 
 	def __del__(self):
 		# print(f"{self} finalizing")
@@ -250,44 +250,3 @@ tag 103
 	"""
 
 	return PiGPIOScript(pig, script)
-
-import time
-
-def trigger_loop(pig, n=1000, t_min=2777, t_max=2778+8333, **kwargs):
-	c = int((t_max - t_min) // n)
-
-	start_time = time.time()
-
-	for i in range(n + 1):
-		s = trigger_wave_script(pig, LED_TIME=t_min + i * c, **kwargs)
-		
-		while s.initing():
-			pass
-		
-		s.start()
-		
-		while s.running():
-			pass
-		
-		p = s.params()
-		print_summary(p)
-
-		s.delete()
-		pig.wave_clear()
-
-	# capture the end time
-	end_time = time.time()
-
-	# Calculate the elapsed time
-	elapsed_time = end_time - start_time
-	
-	print(f"{n/elapsed_time} fps")
-	
-	return fps
-
-
-
-if __name__ == "__main__":
-	pig = start_pig()
-	trigger_loop(pig)
-
