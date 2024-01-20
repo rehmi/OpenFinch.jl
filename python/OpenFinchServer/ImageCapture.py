@@ -136,8 +136,8 @@ class ImageCapture:
 		self.video.close()
 		# self.device.close()
 
-	def __del__(self):
-		self.device.close()
+	# def __del__(self):
+		# self.device.close()
 	
 	def controls(self):
 		return self.device.controls
