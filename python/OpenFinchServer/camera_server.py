@@ -21,6 +21,31 @@ class CameraServer:
 		self.update_t_cur_enable = False
 		self.monitor_index = 1
 		self.jpeg_quality = 75
+  
+		self.handlers = {
+			'update_t_cur_enable':
+       			lambda data: self.handle_update_t_cur_enable(data),
+			'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
+
+			'LED_TIME': lambda data: self.handle_config_control('LED_TIME', data),
+			'LED_WIDTH': lambda data: self.handle_config_control('LED_WIDTH', data),
+			'WAVE_DURATION': lambda data: self.handle_config_control('WAVE_DURATION', data),
+
+			'camera_mode': lambda data: self.handle_camera_mode(data),
+			'exposure_absolute': lambda data: self.handle_camera_control('exposure_absolute', data),
+			'brightness': lambda data: self.handle_camera_control('brightness', data),
+			'contrast': lambda data: self.handle_camera_control('contrast', data),
+			'saturation': lambda data: self.handle_camera_control('saturation', data),
+			'hue': lambda data: self.handle_camera_control('hue', data),
+			'gamma': lambda data: self.handle_camera_control('gamma', data),
+			'gain': lambda data: self.handle_camera_control('gain', data),
+			'power_line_frequency': lambda data: self.handle_camera_control('power_line_frequency', data),
+			'sharpness': lambda data: self.handle_camera_control('sharpness', data),
+			'backlight_compensation': lambda data: self.handle_camera_control('backlight_compensation', data),
+			'exposure_auto': lambda data: self.handle_camera_control('exposure_auto', data),
+			'exposure_auto_priority': lambda data: self.handle_camera_control('exposure_auto_priority', data),
+		}
+  
 		self.initialize_display()
 
 	def initialize_display(self):
@@ -120,7 +145,26 @@ class CameraServer:
 			except Exception as e:
 				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
 				self.active_connections.remove(ws)
-				
+	
+	async def update_control_value(self, control_name, new_value):
+		for ws in list(self.active_connections):  # Create a copy of the set to avoid modifying it while iterating
+			try:
+				await ws.send_str(json.dumps({control_name: {'value': new_value}}))
+			except Exception as e:
+				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
+				self.active_connections.remove(ws)
+
+	async def handle_camera_control(self, control_name, control_data):
+		value = int(control_data.get('value', 0))
+		control_method = getattr(self.cam.vidcap, f"control_set")
+		control_method(control_name, value)
+	
+	async def handle_config_control(self, control_name, control_data):
+		value = int(control_data.get('value', 0))
+		if control_name in ['LED_TIME', 'LED_WIDTH', 'WAVE_DURATION']:
+			setattr(self.cam.config, control_name, value)
+			self.cam.update_wave()
+
 	async def handle_message(self, request):
 		ws = web.WebSocketResponse()
 		self.active_connections.add(ws)
@@ -129,34 +173,13 @@ class CameraServer:
 		async for msg in ws:
 			if msg.type == web.WSMsgType.TEXT:
 				data = json.loads(msg.data)
-    
-				# logging.info(f"got msg {msg}")
-
-				handlers = {
-					'LED_TIME': lambda data: self.handle_led_time(data),
-					'LED_WIDTH': lambda data: self.handle_led_width(data),
-					'WAVE_DURATION': lambda data: self.handle_wave_duration(data),
-        			'image_request': lambda data: self.handle_image_request(data, ws),
-   					'update_t_cur_enable': lambda data: self.handle_update_t_cur_enable(data),
-					'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
-				    'camera_mode': lambda data: self.handle_camera_mode(data),
-    				'exposure_absolute': lambda data: self.handle_exposure_absolute(data),
-					'brightness': lambda data: self.handle_brightness(data),
-					'contrast': lambda data: self.handle_contrast(data),
-					'saturation': lambda data: self.handle_saturation(data),
-					'hue': lambda data: self.handle_hue(data),
-					'gamma': lambda data: self.handle_gamma(data),
-					'gain': lambda data: self.handle_gain(data),
-					'power_line_frequency': lambda data: self.handle_power_line_frequency(data),
-					'sharpness': lambda data: self.handle_sharpness(data),
-					'backlight_compensation': lambda data: self.handle_backlight_compensation(data),
-					'exposure_auto': lambda data: self.handle_exposure_auto(data),
-					'exposure_auto_priority': lambda data: self.handle_exposure_auto_priority(data),
-				}
-				
-				for key, handler in handlers.items():
+	
+				for key, handler in self.handlers.items():
 					if key in data:
 						await handler(data[key])
+
+				if 'image_request' in data:
+					self.handle_image_request(data, ws)
 
 				if data.get('SLM_image', '') == 'next':
 					image_blob = await ws.receive_bytes()
@@ -177,62 +200,14 @@ class CameraServer:
 	async def handle_update_t_cur_enable(self, update_t_cur_enable):
 		self.update_t_cur_enable = update_t_cur_enable.get('value', False)
 
-	async def handle_led_time(self, LED_TIME):
-		self.cam.config.LED_TIME = int(LED_TIME.get('value', self.cam.config.LED_TIME))
-		self.cam.update_wave()
-
-	async def handle_led_width(self, LED_WIDTH):
-		self.cam.config.LED_WIDTH = int(LED_WIDTH.get('value', self.cam.config.LED_WIDTH))
-		self.cam.update_wave()
-	
 	async def handle_jpeg_quality(self, jpeg_quality):
 		self.jpeg_quality = int(jpeg_quality.get('value', 10))
 		
-	async def handle_wave_duration(self, duration):
-		self.cam.config.WAVE_DURATION = int(duration.get('value', self.cam.config.WAVE_DURATION))
-		self.cam.update_wave()
- 
 	async def handle_camera_mode(self, camera_mode):
 		if camera_mode['value'] == 'freerunning':
 			self.cam.set_cam_freerunning()
 		else:
 			self.cam.set_cam_triggered()
-
-	async def handle_exposure_absolute(self, exposure_absolute):
-		self.cam.vidcap.control_set("exposure_absolute", int(exposure_absolute['value']))
-  
-	async def handle_brightness(self, brightness):
-		self.cam.vidcap.control_set("brightness", int(brightness['value']))
-
-	async def handle_contrast(self, contrast):
-		self.cam.vidcap.control_set("contrast", int(contrast['value']))
-
-	async def handle_saturation(self, saturation):
-		self.cam.vidcap.control_set("saturation", int(saturation['value']))
-
-	async def handle_hue(self, hue):
-		self.cam.vidcap.control_set("hue", int(hue['value']))
-
-	async def handle_gamma(self, gamma):
-		self.cam.vidcap.control_set("gamma", int(gamma['value']))
-
-	async def handle_gain(self, gain):
-		self.cam.vidcap.control_set("gain", int(gain['value']))
-
-	async def handle_power_line_frequency(self, power_line_frequency):
-		self.cam.vidcap.control_set("power_line_frequency", int(power_line_frequency['value']))
-
-	async def handle_sharpness(self, sharpness):
-		self.cam.vidcap.control_set("sharpness", int(sharpness['value']))
-
-	async def handle_backlight_compensation(self, backlight_compensation):
-		self.cam.vidcap.control_set("backlight_compensation", int(backlight_compensation['value']))
-
-	async def handle_exposure_auto(self, exposure_auto):
-		self.cam.vidcap.control_set("exposure_auto", int(exposure_auto['value']))
-
-	async def handle_exposure_auto_priority(self, exposure_auto_priority):
-		self.cam.vidcap.control_set("exposure_auto_priority", int(exposure_auto_priority['value']))
 
 	async def handle_http(self, request):
 		script_dir = os.path.dirname(__file__)
