@@ -5,11 +5,13 @@
 	<title>OpenFinch dashboard</title>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 	<style>
+		/* Sets the default background color and text color for the body */
 		body {
 			background-color: lightsteelblue;
 			color: hsl(0, 0%, 10%);
 		}
 
+		/* Adjusts the background and text color for dark mode preference */
 		@media (prefers-color-scheme: dark) {
 			body {
 				background-color: #0f1010;
@@ -17,11 +19,13 @@
 			}
 		}
 
+		/* Sets a responsive width for images and makes their height adjust automatically */
 		img {
 			width: 95%;
 			height: auto;
 		}
 
+		/* Styles the container of slider elements to form a row with aligned items */
 		.slider-group {
 			display: flex;
 			/* justify-content: space-between; */
@@ -29,6 +33,7 @@
 			width: 70%;
 		}
 
+		/* Sets the label width and its margins and padding for alignment */
 		.slider-group label {
 			width: 30%;
 			margin: 0;
@@ -36,12 +41,14 @@
 			text-align: right;
 		}
 
+		/* Adjusts the range input width to occupy proportion of its container without additional margins or padding */
 		.slider-group input[type=range] {
 			width: 30%;
 			margin: 0;
 			padding: 0;
 		}
 
+		/* Defines the width, margin, and padding for the span that displays the slider's value */
 		.slider-group span {
 			width: 20%;
 			margin: 0;
@@ -49,6 +56,161 @@
 			text-align: left;
 		}
 
+		/* Updates the body background color, text color, and font for readability */
+		body {
+			background-color: #F5F5F5;
+			color: #333;
+			font-family: Arial, sans-serif;
+		}
+
+		/* Styles the main heading, center aligns the text, and adds vertical padding */
+		h1 {
+			color: #333;
+			text-align: center;
+			padding: 20px 0;
+		}
+
+		/* Styles the generic div with margin, padding, and border properties */
+		/* div {
+			margin: 20px 0;
+			padding: 20px;
+			border: 1px solid #ddd;
+			border-radius: 5px;
+		} */
+
+		/* Applies a universal styling for range and checkbox input types */
+		/* input[type=range], input[type=checkbox] {
+			width: 100%;
+			padding: 10px;
+			box-sizing: border-box;
+		} */
+
+		/* Customizes the appearance of the webkit slider's track */
+		/* input[type=range]::-webkit-slider-runnable-track {
+			width: 100%;
+			height: 8px;
+			cursor: pointer;
+			animate: 0.2s;
+			box-shadow: 1px 1px 1px #000000;
+			background: #367ebd;
+			border-radius: 1.3px;
+			border: 0.2px solid #010101;
+		} */
+
+		/* Customizes the appearance of the webkit slider's thumb */
+		/* input[type=range]::-webkit-slider-thumb {
+			box-shadow: 1px 1px 1px #000000;
+			border: 1px solid #000000;
+			height: 36px;
+			width: 16px;
+			border-radius: 3px;
+			background: #ffffff;
+			cursor: pointer;
+			-webkit-appearance: none;
+			margin-top: -14px;
+		} */
+
+		/* Removes the focus outline from the range inputs */
+		input[type=range]:focus {
+			outline: none;
+		}
+
+		/* Customizes the focus state of webkit slider runnable track */
+		/* input[type=range]:focus::-webkit-slider-runnable-track {
+			background: #367ebd;
+		} */
+
+		/* Styles the range track for Mozilla browsers */
+		/* input[type=range]::-moz-range-track {
+			width: 100%;
+			height: 8px;
+			cursor: pointer;
+			animate: 0.2s;
+			box-shadow: 1px 1px 1px #000000;
+			background: #367ebd;
+			border-radius: 1.3px;
+			border: 0.2px solid #010101;
+		} */
+
+		/* Styles the range thumb for Mozilla browsers */
+		/* input[type=range]::-moz-range-thumb {
+			box-shadow: 1px 1px 1px #000000;
+			border: 1px solid #000000;
+			height: 36px;
+			width: 16px;
+			border-radius: 3px;
+			background: #ffffff;
+			cursor: pointer;
+		} */
+
+		/* Defines the track of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-track {
+			width: 100%;
+			height: 8px;
+			cursor: pointer;
+			animate: 0.2s;
+			background: transparent;
+			border-color: transparent;
+			color: transparent;
+		} */
+
+		/* Styles the lower fill of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-fill-lower {
+			background: #2a6495;
+			border: 0.2px solid #010101;
+			border-radius: 2.6px;
+			box-shadow: 1px 1px 1px #000000;
+		} */
+
+		/* Styles the upper fill of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-fill-upper {
+			background: #367ebd;
+			border: 0.2px solid #010101;
+			border-radius: 2.6px;
+			box-shadow: 1px 1px 1px #000000;
+		} */
+
+		/* Styles the thumb of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-thumb {
+			box-shadow: 1px 1px 1px #000000;
+			border: 1px solid #000000;
+			height: 36px;
+			width: 16px;
+			border-radius: 3px;
+			background: #ffffff;
+			cursor: pointer;
+		} */
+
+		/* Enhances the focus state for the lower fill of the slider for Microsoft browsers */
+		/* input[type=range]:focus::-ms-fill-lower {
+			background: #3071a9;
+		} */
+
+		/* Enhances the focus state for the upper fill of the slider for Microsoft browsers */
+		/* input[type=range]:focus::-ms-fill-upper {
+			background: #367ebd;
+		} */
+
+		/* Provides default styling for checkboxes */
+		/* input[type=checkbox] {
+			display: block;
+			margin: 10px 0;
+		} */
+
+		/* Styles the button element with padding, color, and interaction */
+		/* button {
+			padding: 10px 10px;
+			background-color: #367ebd;
+			color: #fff;
+			border: none;
+			border-radius: 5px;
+			cursor: pointer;
+		} */
+
+		/* Changes the button's background color on hover for better interaction */
+		/* button:hover {
+			background-color: #2a6495;
+		} */
 	</style>
 </head>
 
@@ -59,28 +221,13 @@
 		<input type="checkbox" id="update_t_cur" name="update_t_cur">
 	</div>
 
-	<div>
-		<label for="LED_TIME">LED time:</label>
-		<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
-		<span id="LED_TIME_Value">1000</span>
-	</div>
-	
-	<div>
-		<label for="WAVE_DURATION">Wave duration:</label>
-		<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="70000" step="100" value="33400">
-		<span id="WAVE_DURATION_Value">33400</span>
-	</div>
-	
-	<div>
-		<label for="LED_WIDTH">LED Width:</label>
-		<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
-		<span id="LED_WIDTH_Value">20</span>
-	</div>
-
-	<div>
-		<p>Image Capture Reader FPS: <span id="image_capture_reader_fps">0</span></p>
-		<p>Image Capture Capture FPS: <span id="image_capture_capture_fps">0</span></p>
-		<p>System Controller FPS: <span id="system_controller_fps">0</span></p>
+	<div style="position: absolute; top: 1lh; right: 5%;">
+	    <p>
+	        Reader/Capture/Controller fps:
+			<span id="image_capture_reader_fps">0</span> /
+			<span id="image_capture_capture_fps">0</span> /
+			<span id="system_controller_fps">0</span>
+	    </p>
 	</div>
 
 	<!--
@@ -114,6 +261,24 @@
 	</div>
 
 	<div class="slider-container">
+		<div class="slider-group">
+			<label for="LED_TIME">LED time:</label>
+			<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
+			<span id="LED_TIME_Value">1000</span>
+		</div>
+		
+		<div class="slider-group">
+			<label for="WAVE_DURATION">Wave duration:</label>
+			<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="70000" step="100" value="33400">
+			<span id="WAVE_DURATION_Value">33400</span>
+		</div>
+		
+		<div class="slider-group">
+			<label for="LED_WIDTH">LED Width:</label>
+			<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
+			<span id="LED_WIDTH_Value">20</span>
+		</div>
+
 		<div class="slider-group">
 			<label for="exposure_absolute">Absolute exposure:</label>
 			<input type="range" id="exposure_absolute" name="exposure_absolute" min="1" max="5000" step="1" value="66">
@@ -230,7 +395,7 @@
 				if (data.image_response && data.image_response.image === 'next') {
 					nextIsImage = true;
 				} else {
-					console.log(data);
+					// console.log(data);
 				}
 
 				if (data.LED_TIME) {
