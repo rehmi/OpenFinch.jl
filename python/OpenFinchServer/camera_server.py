@@ -18,20 +18,20 @@ class CameraServer:
 		self.cam = SystemController()
 		self.cam.set_cam_triggered()
 		self.active_connections = set()
-		self.update_t_cur_enable = False
+		self.sweep_enable = False
 		self.monitor_index = 1
 		self.jpeg_quality = 75
   
 		self.handlers = {
-			'update_t_cur_enable':
-       			lambda data: self.handle_update_t_cur_enable(data),
+			'sweep_enable':
+       			lambda data: self.handle_sweep_enable(data),
 			'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
+			'camera_mode': lambda data: self.handle_camera_mode(data),
 
 			'LED_TIME': lambda data: self.handle_config_control('LED_TIME', data),
 			'LED_WIDTH': lambda data: self.handle_config_control('LED_WIDTH', data),
 			'WAVE_DURATION': lambda data: self.handle_config_control('WAVE_DURATION', data),
 
-			'camera_mode': lambda data: self.handle_camera_mode(data),
 			'exposure_absolute': lambda data: self.handle_camera_control('exposure_absolute', data),
 			'brightness': lambda data: self.handle_camera_control('brightness', data),
 			'contrast': lambda data: self.handle_camera_control('contrast', data),
@@ -125,8 +125,8 @@ class CameraServer:
 			height = self.img_height
 		frame = self.cam.capture_frame()
 		if frame is not None:
-			if self.update_t_cur_enable:
-				self.cam.update_t_cur()
+			if self.sweep_enable:
+				self.cam.sweep()
 				await self.update_led_time(self.cam.config.LED_TIME)
 			self.cam.update_wave()
 	
@@ -197,8 +197,8 @@ class CameraServer:
 		# await self.send_captured_image(ws)
 		return
 
-	async def handle_update_t_cur_enable(self, update_t_cur_enable):
-		self.update_t_cur_enable = update_t_cur_enable.get('value', False)
+	async def handle_sweep_enable(self, sweep_enable):
+		self.sweep_enable = sweep_enable.get('value', False)
 
 	async def handle_jpeg_quality(self, jpeg_quality):
 		self.jpeg_quality = int(jpeg_quality.get('value', 10))

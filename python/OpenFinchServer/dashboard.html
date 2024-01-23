@@ -10,82 +10,6 @@
 			color: hsl(0, 0%, 10%);
 		}
 
-		/* Adjusts the background and text color for dark mode preference */
-		@media (prefers-color-scheme: dark) {
-			body {
-				background-color: #0f1010;
-				color: lightblue;
-			}
-		}
-
-		/* Sets a responsive width for images and makes their height adjust automatically */
-		img {
-			width: 95%;
-			height: auto;
-		}
-
-		/* Styles the container of slider elements to form a row with aligned items */
-		.slider-decorated {
-			display: flex;
-			/* justify-content: space-between; */
-			align-items: center;
-			width: 70%;
-		}
-
-		/* Sets the label width and its margins and padding for alignment */
-		.slider-decorated label {
-			width: 15%;
-			margin: 0;
-			padding: 0;
-			text-align: right;
-		}
-
-		/* Adjusts the range input width to occupy proportion of its container without additional margins or padding */
-		.slider-decorated input[type=range] {
-			width: 30%;
-			margin: 0;
-			padding: 0;
-		}
-
-		/* Defines the width, margin, and padding for the span that displays the slider's value */
-		.slider-decorated span {
-			width: 15%;
-			margin: 0;
-			padding: 0;
-			text-align: left;
-		}
-
-		/* Styles the container of checkbox elements to form a row with aligned items */
-		.checkbox-decorated {
-			display: flex;
-			/* justify-content: space-between; */
-			align-items: center;
-			width: 70%;
-		}
-
-		/* Styles the checkbox label */
-		.checkbox-decorated label {
-			width: 15%;
-			margin: 0;
-			padding: 0;
-			text-align: right;
-		}
-
-		/* Style the checkbox to a proportion of its container */
-		.checkbox-decorated input[type=range] {
-			width: 30%;
-			margin: 0;
-			padding: 0;
-		}
-
-		/* Style the span that displays the checkbox's value */
-		.checkbox-decorated span {
-			width: 15%;
-			margin: 0;
-			padding: 0;
-			text-align: left;
-		}
-
 		/* Updates the body background color, text color, and font for readability */
 		body {
 			background-color: #F5F5F5;
@@ -98,6 +22,100 @@
 			color: #333;
 			text-align: center;
 			padding: 20px 0;
+		}
+
+		/* Adjusts the background and text color for dark mode preference */
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #0f1010;
+				color: lightblue;
+			}
+		}
+
+		/* Sets a responsive width for images, makes their height adjust automatically, and centers them horizontally */
+		img {
+		    display: block;
+		    max-width: 90%;          /* Image will occupy up to 90% of the container's width */
+		    height: auto;            /* Height is automatically adjusted to maintain the aspect ratio */
+		    margin-left: auto;       /* Horizontally centers the image */
+		    margin-right: auto;      /* Horizontally centers the image */
+		}
+
+		.control-container {
+			display: flex;
+			flex-wrap: wrap;
+			max-width: 500px;
+			min-width: 300px;
+			margin: 0 1vw; /* 5% of the viewport width on the left and right */
+		}
+
+		.controls-wrapper {
+			display: flex;
+			justify-content: space-evenly; /* This will space out the child divs evenly */
+			flex-wrap: wrap; /* This allows the containers to wrap onto the next line on smaller screens */
+		}
+		
+		/* Styles the container of slider elements to form a row with aligned items */
+		.slider-decorated {
+			display: flex;
+			justify-content: space-between;
+			/* align-items: center; */
+			width: 100%;
+		}
+
+		/* Sets the label width and its margins and padding for alignment */
+		.slider-decorated label {
+			max-width: 50%;
+			margin: 0;
+			padding: 0;
+			text-align: right;
+		}
+
+		/* Adjusts the range input width to occupy proportion of its container without additional margins or padding */
+		.slider-decorated input[type=range] {
+			width: 300px;
+			/* margin: 0; */
+			/* padding: 0; */
+			align-items: first;
+		}
+
+		/* Defines the width, margin, and padding for the span that displays the slider's value */
+		.slider-decorated span {
+			/* width: 10%;
+			margin: 0;
+			padding: 0; */
+			text-align: left;
+		}
+
+		/* Styles the container of checkbox elements to form a row with aligned items */
+		.checkbox-decorated {
+			display: flex;
+			/* justify-content: space-between; */
+			align-items: center;
+			width: 100%;
+		}
+
+		/* Styles the checkbox label */
+		.checkbox-decorated label {
+			width: 40%;
+			margin: 0;
+			padding: 0;
+			text-align: right;
+		}
+
+		/* Style the checkbox to a proportion of its container */
+		.checkbox-decorated input[type=range] {
+			width: 10%;
+			margin: 0;
+			padding: 0;
+		}
+
+		/* Style the span that displays the checkbox's value */
+		.checkbox-decorated span {
+			width: 50%;
+			margin: 0;
+			padding: 0;
+			text-align: left;
 		}
 
 		/* Styles the generic div with margin, padding, and border properties */
@@ -247,15 +265,6 @@
 <body>
 	<h1>OpenFinch dashboard</h1>
 
-	<div style="position: absolute; top: 1lh; right: 5%;">
-	    <p>
-	        Reader/Capture/Controller fps:
-			<span id="image_capture_reader_fps">0</span> /
-			<span id="image_capture_capture_fps">0</span> /
-			<span id="system_controller_fps">0</span>
-	    </p>
-	</div>
-
 	<!--
 		Here's is a list of OV2311 v4l2 controls:
 
@@ -281,120 +290,121 @@
 	 -->
 
 	<!-- Checkbox for camera mode -->
-	<div class="control-container">
-		<div class="checkbox-decorated">
-			<label for="cam_mode">Camera Mode:</label>
-			<input type="checkbox" id="cam_mode" name="cam_mode">
-			<span id="cam_mode_value">triggered</span>
-		</div>
-		
-		<div>
-			<label for="update_t_cur">Sweep LED time:</label>
-			<input type="checkbox" id="update_t_cur" name="update_t_cur">
-		</div>
-		
-		<div>
-			<label for="power_line_frequency">Power Line Frequency:</label>
-			<select id="power_line_frequency" name="power_line_frequency">
-				<option value="0">Disabled</option>
-				<option value="1">50 Hz</option>
-				<option value="2">60 Hz</option>
-			</select>
-		</div>
-		
-		<div>
-			<label for="exposure_auto">Exposure Auto:</label>
-			<select id="exposure_auto" name="exposure_auto">
-				<option value="1">Manual Mode</option>
-				<option value="3">Aperture Priority Mode</option>
-			</select>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="backlight_compensation">Backlight Compensation:</label>
-			<select id="backlight_compensation" name="backlight_compensation">
-				<option value="0">0</option>
-				<option value="1">1</option>
-				<option value="2">2</option>
-			</select>
+	<div class="controls-wrapper">
+		<div class="control-container">
+			<div class="checkbox-decorated">
+				<label for="cam_mode">Camera Mode:</label>
+				<input type="checkbox" id="cam_mode" name="cam_mode">
+				<span id="cam_mode_value">triggered</span>
+			</div>
+			
+			<div>
+				<label for="sweep">Sweep LED time:</label>
+				<input type="checkbox" id="sweep" name="sweep">
+			</div>
+			
+			<div>
+				<label for="power_line_frequency">Power Line Frequency:</label>
+				<select id="power_line_frequency" name="power_line_frequency">
+					<option value="0">Disabled</option>
+					<option value="1">50 Hz</option>
+					<option value="2">60 Hz</option>
+				</select>
+			</div>
+			
+			<div>
+				<label for="exposure_auto">Exposure Auto:</label>
+				<select id="exposure_auto" name="exposure_auto">
+					<option value="1">Manual Mode</option>
+					<option value="3">Aperture Priority Mode</option>
+				</select>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="backlight_compensation">Backlight Compensation:</label>
+				<select id="backlight_compensation" name="backlight_compensation">
+					<option value="0">0</option>
+					<option value="1">1</option>
+					<option value="2">2</option>
+				</select>
+			</div>
+
+			<div class="slider-decorated">
+				<label for="LED_TIME">LED time:</label>
+				<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
+				<span id="LED_TIME_value">1000</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="WAVE_DURATION">Wave duration:</label>
+				<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="70000" step="100" value="33400">
+				<span id="WAVE_DURATION_value">33400</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="LED_WIDTH">LED Width:</label>
+				<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
+				<span id="LED_WIDTH_value">20</span>
+			</div>
+
+			<div class="slider-decorated">
+				<label for="JPEG_QUALITY">JPEG quality:</label>
+				<input type="range" id="JPEG_QUALITY" name="JPEG_QUALITY" min="0" max="100" step="1" value="25">
+				<span id="JPEG_QUALITY_value">25</span>
+			</div>
 		</div>
 
-		<div class="slider-decorated">
-			<label for="LED_TIME">LED time:</label>
-			<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
-			<span id="LED_TIME_value">1000</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="WAVE_DURATION">Wave duration:</label>
-			<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="70000" step="100" value="33400">
-			<span id="WAVE_DURATION_value">33400</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="LED_WIDTH">LED Width:</label>
-			<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
-			<span id="LED_WIDTH_value">20</span>
-		</div>
+		<div class="control-container">
+			<div class="slider-decorated">
+				<label for="exposure_absolute">Absolute exposure:</label>
+				<input type="range" id="exposure_absolute" name="exposure_absolute" min="1" max="5000" step="1" value="66">
+				<span id="exposure_absolute_value">66</span>
+			</div>
 
-		<div class="slider-decorated">
-			<label for="JPEG_QUALITY">JPEG quality:</label>
-			<input type="range" id="JPEG_QUALITY" name="JPEG_QUALITY" min="0" max="100" step="1" value="25">
-			<span id="JPEG_QUALITY_value">25</span>
-		</div>
-	</div>
+			<div class="slider-decorated">
+				<label for="brightness">Brightness:</label>
+				<input type="range" id="brightness" name="brightness" min="-64" max="64" step="1" value="0">
+				<span id="brightness_value">0</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="contrast">Contrast:</label>
+				<input type="range" id="contrast" name="contrast" min="0" max="64" step="1" value="32">
+				<span id="contrast_value">32</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="saturation">Saturation:</label>
+				<input type="range" id="saturation" name="saturation" min="0" max="128" step="1" value="0">
+				<span id="saturation_value">0</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="hue">Hue:</label>
+				<input type="range" id="hue" name="hue" min="-40" max="40" step="1" value="1">
+				<span id="hue_value">1</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="gamma">Gamma:</label>
+				<input type="range" id="gamma" name="gamma" min="72" max="500" step="1" value="100">
+				<span id="gamma_value">100</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="gain">Gain:</label>
+				<input type="range" id="gain" name="gain" min="0" max="100" step="1" value="0">
+				<span id="gain_value">0</span>
+			</div>
+			
+			<div class="slider-decorated">
+				<label for="sharpness">Sharpness:</label>
+				<input type="range" id="sharpness" name="sharpness" min="0" max="6" step="1" value="3">
+				<span id="sharpness_value">6</span>
+			</div>
 
-	<div class="control-container">
-		<div class="slider-decorated">
-			<label for="exposure_absolute">Absolute exposure:</label>
-			<input type="range" id="exposure_absolute" name="exposure_absolute" min="1" max="5000" step="1" value="66">
-			<span id="exposure_absolute_value">66</span>
 		</div>
-
-		<div class="slider-decorated">
-			<label for="brightness">Brightness:</label>
-			<input type="range" id="brightness" name="brightness" min="-64" max="64" step="1" value="0">
-			<span id="brightness_value">0</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="contrast">Contrast:</label>
-			<input type="range" id="contrast" name="contrast" min="0" max="64" step="1" value="32">
-			<span id="contrast_value">32</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="saturation">Saturation:</label>
-			<input type="range" id="saturation" name="saturation" min="0" max="128" step="1" value="0">
-			<span id="saturation_value">0</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="hue">Hue:</label>
-			<input type="range" id="hue" name="hue" min="-40" max="40" step="1" value="1">
-			<span id="hue_value">1</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="gamma">Gamma:</label>
-			<input type="range" id="gamma" name="gamma" min="72" max="500" step="1" value="100">
-			<span id="gamma_value">100</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="gain">Gain:</label>
-			<input type="range" id="gain" name="gain" min="0" max="100" step="1" value="0">
-			<span id="gain_value">0</span>
-		</div>
-		
-		<div class="slider-decorated">
-			<label for="sharpness">Sharpness:</label>
-			<input type="range" id="sharpness" name="sharpness" min="0" max="6" step="1" value="3">
-			<span id="sharpness_value">6</span>
-		</div>
-
-	</div>
-	
+	</div>	
 
 	<!-- This control is redundant wrt the camera mode control -->
 	<!-- <div>
@@ -404,9 +414,18 @@
 
 	<p>
 
-	<div>
+	<div style="position: relative;">
 		<img id="image" alt="image">
+		<div style="position: absolute; bottom: 0%; left: 6%; z-index: 10;">
+			<p style="color: hsl(120, 100%, 50%); text-shadow: rgb(0, 0, 0) 0px 0px 10px;">
+				Reader/Capture/Controller fps:
+				<span id="image_capture_reader_fps">0</span> /
+				<span id="image_capture_capture_fps">0</span> /
+				<span id="system_controller_fps">0</span>
+			</p>
+		</div>
 	</div>
+
 
 	<script>
 		var host = window.location.hostname;
@@ -472,10 +491,10 @@
 			}
 		}
 
-		document.getElementById('update_t_cur').addEventListener('change', function () {
+		document.getElementById('sweep').addEventListener('change', function () {
 			if (ws.readyState == WebSocket.OPEN) {
 				ws.send(JSON.stringify({
-					'update_t_cur_enable': {
+					'sweep_enable': {
 						'value': this.checked
 					}
 				}));

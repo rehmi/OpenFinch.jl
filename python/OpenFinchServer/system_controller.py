@@ -103,7 +103,7 @@ class SystemController:
 	def set_cam_freerunning(self):
 		self.vidcap.control_set("exposure_auto_priority", 0)
 
-	def update_t_cur(self):
+	def sweep(self):
 		self.config.LED_TIME += self.dt
 		if self.config.LED_TIME > self.t_max:
 			self.config.LED_TIME = self.t_min

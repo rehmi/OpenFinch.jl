@@ -4,7 +4,16 @@
 
 □ API to communicate with OpenFinchServer
 
-## combo.py:
+□ add README.md, link to SLM-VERA
+
+
+## OpenFinchServer, combo.py:
+
+□ add callbacks to control_set method to update clients
+
+□ waveform generation abstraction (more LEDs, flexible camera triggering, etc.)
+
+□ rename combo.py, reorganize OpenFinchServer and add setup.py
 
 □ clean up dashboard design
 
@@ -14,7 +23,7 @@
 
 □ text box containing the wave script
 
-□ improve concurrency via threading and queue
+□ improve concurrency via threading and queues
 
 ⧆ keep track of all frame data and metadata (e.g. timestamps, original MJPG data)
 
