@@ -428,9 +428,12 @@
 
 
 	<script>
-		var host = window.location.hostname;
-		var port = window.location.port;
-		var ws = new WebSocket('ws://' + host + ':' + port + '/ws');
+		// default values for host and port if they have not been previously defined
+		if (typeof host === 'undefined') { var host = window.location.hostname; }
+		if (typeof port === 'undefined') { var port = window.location.port; }
+		var uri = 'ws://' + host + ':' + port + '/ws';
+		console.log("dashboard: uri = " + uri);
+		var ws = new WebSocket(uri);
 		ws.binaryType = 'blob'; // Set the binaryType to 'blob'
 		var throttle = false;
 		var nextIsImage = false;
@@ -538,18 +541,6 @@
 			}
 		});
 
-		document.getElementById('sharpness').addEventListener('input', function () {
-			var sharpness = this.value;
-			document.getElementById('sharpness_value').textContent = sharpness;
-			if (ws.readyState == WebSocket.OPEN) {
-				ws.send(JSON.stringify({
-					'sharpness': {
-						'value': parseInt(sharpness)
-					}
-				}));
-			}
-		});
-
 		document.getElementById('backlight_compensation').addEventListener('input', function () {
 			var compensation = this.value;
 			document.getElementById('backlight_compensation_value').textContent = compensation;
@@ -572,36 +563,6 @@
 				}));
 			}
 		});
-
-		// document.getElementById('exposure_auto_priority').addEventListener('change', function () {
-		// 	var priority = this.checked ? 1 : 0;
-		// 	if (ws.readyState == WebSocket.OPEN) {
-		// 		ws.send(JSON.stringify({
-		// 			'exposure_auto_priority': {
-		// 				'value': priority
-		// 			}
-		// 		}));
-		// 	}
-		// });
-
-		// function handleRangeInput(sliderId) {
-			// 	$('input[type=range][id=' + sliderId + ']').on('input', function () {
-			// 		var sliderValue = $(this).val();
-			// 		$('#' + sliderId + '_value').text(sliderValue);
-			// 		if (ws.readyState == WebSocket.OPEN) {
-			// 			ws.send(JSON.stringify({
-			// 				[this.id]: {
-			// 					'value': parseInt(sliderValue)
-			// 				}
-			// 			}));
-			// 		}
-			// 	});
-			// }
-
-			// Call the function for each control
-			// handleRangeInput('LED_TIME');
-			// handleRangeInput('LED_WIDTH');
-			// Add more calls as needed for other controls
 	</script>
 </body>
 

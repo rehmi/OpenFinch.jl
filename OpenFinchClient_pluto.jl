@@ -34,43 +34,47 @@ end
 # ╔═╡ 0f31e892-29ef-43fa-be78-0d307707a3fc
 md"# OpenFinch client development"
 
-# ╔═╡ 7ef5dcbf-9810-409c-84f6-401a0abbd1c1
-PlutoTeachingTools.ChooseDisplayMode()
-
 # ╔═╡ a4521bc4-cbd1-4ab8-9a15-69998d78b3a2
 PlutoUI.TableOfContents()
 
 # ╔═╡ 8c314669-87f8-4e59-b321-853e590c79ee
-md"### Visualization"
+md"## Visualization"
+
+# ╔═╡ 7ef5dcbf-9810-409c-84f6-401a0abbd1c1
+PlutoTeachingTools.ChooseDisplayMode()
 
 # ╔═╡ 723986e6-79c6-4078-b35d-234ee9be26fe
 md"## Benchmarks"
 
 # ╔═╡ f1d86323-d3ce-47f9-ab86-266f99c627d4
-md"### Open/close connection benchmark"
+md"### Open/close connection"
 
 # ╔═╡ f423d1f0-2dfb-4e64-b936-0755169175e7
 @benchmark HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
-    # msg = receive(ws)
 end
 
-# ╔═╡ e93f0586-99fe-4a5f-b4c8-86da265aef15
-md"### Receive 100 images benchmark"
+# ╔═╡ 0cb248a9-7ce5-4882-8cd1-7021dc2f5341
+md"### Open/read image/close connection"
 
-# ╔═╡ a669fdcd-d782-4d10-8a27-710d3fcafe27
-@timev HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
-	n = 100
-    while n > 0
+# ╔═╡ 0cfe658f-a632-46de-95e3-16330fce3033
+@benchmark HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
+    while true
 		msg = JSON.parse(WebSockets.receive(ws))
 		if haskey(msg, "image_response")
 			img_bin = WebSockets.receive(ws)
-			n -= 1
+			break
 		end
 	end
-end
+end seconds=15 samples=100
+
+# ╔═╡ 6c3a0570-e146-4416-a579-3e4328fdaefc
+md"""## Collect 100 images
+
+Note that image decoding is done in a spawned thread to minimize impact on timing.
+"""
 
 # ╔═╡ 8210eb5f-8e4e-4080-8545-8936e8fa79d1
-@timev HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
+@time HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
 	req = JSON.json(Dict("image_request" => "now"))
 	global msgs = []
 	global imgs = []
@@ -94,6 +98,26 @@ end
 
 # ╔═╡ af651a15-43fb-4b35-ad55-424a04b53544
 mosaicview(imgs..., nrow=10, rowmajor=true, center=true, npad=100, fillvalue=colorant"gray")
+
+# ╔═╡ 6ec24024-2d48-4226-860f-b775594fb8f3
+md"""
+# HTML dashboard: will it blend?
+
+Here, the default dashboard has been incorporated directly into the notebook.
+"""
+
+# ╔═╡ 9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
+# don't really need this but keep it handy just in case...
+# using HypertextLiteral
+
+# ╔═╡ 16a975f8-81bf-4432-b1da-fe68f06eddfb
+HTML("""
+<html><body><script> 
+var host = "localhost"; 
+var port = "8000";
+</script></body></html>
+$(String(read("python/OpenFinchServer/dashboard.html")))
+""")
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1907,15 +1931,19 @@ version = "1.4.1+1"
 # ╔═╡ Cell order:
 # ╟─0f31e892-29ef-43fa-be78-0d307707a3fc
 # ╠═68751a63-0b5c-405e-b97d-57a30d5b9f25
-# ╟─7ef5dcbf-9810-409c-84f6-401a0abbd1c1
 # ╟─a4521bc4-cbd1-4ab8-9a15-69998d78b3a2
 # ╟─8c314669-87f8-4e59-b321-853e590c79ee
+# ╟─7ef5dcbf-9810-409c-84f6-401a0abbd1c1
 # ╠═af651a15-43fb-4b35-ad55-424a04b53544
 # ╟─723986e6-79c6-4078-b35d-234ee9be26fe
 # ╟─f1d86323-d3ce-47f9-ab86-266f99c627d4
 # ╠═f423d1f0-2dfb-4e64-b936-0755169175e7
-# ╠═e93f0586-99fe-4a5f-b4c8-86da265aef15
-# ╠═a669fdcd-d782-4d10-8a27-710d3fcafe27
+# ╟─0cb248a9-7ce5-4882-8cd1-7021dc2f5341
+# ╠═0cfe658f-a632-46de-95e3-16330fce3033
+# ╟─6c3a0570-e146-4416-a579-3e4328fdaefc
 # ╠═8210eb5f-8e4e-4080-8545-8936e8fa79d1
+# ╟─6ec24024-2d48-4226-860f-b775594fb8f3
+# ╠═9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
+# ╠═16a975f8-81bf-4432-b1da-fe68f06eddfb
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
