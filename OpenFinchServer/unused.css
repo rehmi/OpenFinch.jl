@@ -1,0 +1,116 @@
+		/* Customizes the appearance of the webkit slider's track */
+		/* input[type=range]::-webkit-slider-runnable-track {
+			width: 100%;
+			height: 8px;
+			cursor: pointer;
+			animate: 0.2s;
+			box-shadow: 1px 1px 1px #000000;
+			background: #367ebd;
+			border-radius: 1.3px;
+			border: 0.2px solid #010101;
+		} */
+
+		/* Customizes the appearance of the webkit slider's thumb */
+		/* input[type=range]::-webkit-slider-thumb {
+			box-shadow: 1px 1px 1px #000000;
+			border: 1px solid #000000;
+			height: 36px;
+			width: 16px;
+			border-radius: 3px;
+			background: #ffffff;
+			cursor: pointer;
+			-webkit-appearance: none;
+			margin-top: -14px;
+		} */
+		
+		/* Styles the range track for Mozilla browsers */
+		/* input[type=range]::-moz-range-track {
+			width: 100%;
+			height: 8px;
+			cursor: pointer;
+			animate: 0.2s;
+			box-shadow: 1px 1px 1px #000000;
+			background: #367ebd;
+			border-radius: 1.3px;
+			border: 0.2px solid #010101;
+		} */
+
+		/* Styles the range thumb for Mozilla browsers */
+		/* input[type=range]::-moz-range-thumb {
+			box-shadow: 1px 1px 1px #000000;
+			border: 1px solid #000000;
+			height: 36px;
+			width: 16px;
+			border-radius: 3px;
+			background: #ffffff;
+			cursor: pointer;
+		} */
+
+		/* Defines the track of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-track {
+			width: 100%;
+			height: 8px;
+			cursor: pointer;
+			animate: 0.2s;
+			background: transparent;
+			border-color: transparent;
+			color: transparent;
+		} */
+
+		/* Styles the lower fill of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-fill-lower {
+			background: #2a6495;
+			border: 0.2px solid #010101;
+			border-radius: 2.6px;
+			box-shadow: 1px 1px 1px #000000;
+		} */
+
+		/* Styles the upper fill of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-fill-upper {
+			background: #367ebd;
+			border: 0.2px solid #010101;
+			border-radius: 2.6px;
+			box-shadow: 1px 1px 1px #000000;
+		} */
+
+		/* Styles the thumb of the slider for Microsoft browsers */
+		/* input[type=range]::-ms-thumb {
+			box-shadow: 1px 1px 1px #000000;
+			border: 1px solid #000000;
+			height: 36px;
+			width: 16px;
+			border-radius: 3px;
+			background: #ffffff;
+			cursor: pointer;
+		} */
+
+		/* Enhances the focus state for the lower fill of the slider for Microsoft browsers */
+		/* input[type=range]:focus::-ms-fill-lower {
+			background: #3071a9;
+		} */
+
+		/* Enhances the focus state for the upper fill of the slider for Microsoft browsers */
+		/* input[type=range]:focus::-ms-fill-upper {
+			background: #367ebd;
+		} */
+
+		/* Provides default styling for checkboxes */
+		/* input[type=checkbox] {
+			display: block;
+			margin: 10px 0;
+		} */
+
+		/* Styles the button element with padding, color, and interaction */
+		/* button {
+			padding: 10px 10px;
+			background-color: #367ebd;
+			color: #fff;
+			border: none;
+			border-radius: 5px;
+			cursor: pointer;
+		} */
+
+		/* Changes the button's background color on hover for better interaction */
+		/* button:hover {
+			background-color: #2a6495;
+		} */

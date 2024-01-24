@@ -22,7 +22,7 @@ class SystemController:
 		self.dt = 8333 // 333
 		self.t_min = 1000
 		self.t_max = 8333 + self.t_min
-		self.fps_logger = FrameRateMonitor("SystemController", 5)
+		self.fps_logger = FrameRateMonitor("SystemController", 1)
 
 		# Now initialize the rest of the components that depend on the config
 		self.pig = start_pig()

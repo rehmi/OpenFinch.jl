@@ -62,8 +62,8 @@ class ImageCapture:
 
 		self.frame_queue = queue.Queue(maxsize=1)
 		self.running = False
-		self.reader_fps = FrameRateMonitor("ImageCapture reader", 5)
-		self.capture_fps = FrameRateMonitor("ImageCapture capture", 5)
+		self.reader_fps = FrameRateMonitor("ImageCapture reader", 1)
+		self.capture_fps = FrameRateMonitor("ImageCapture capture", 1)
 
 	def _start_reader(self):
 		self.running = True
@@ -97,22 +97,6 @@ class ImageCapture:
 	def capture_grayscale(self, blocking=True):
 			cap = self.capture_frame(blocking=blocking)
 			return cap.to_grayscale()
-
-	# def capture_frame(self, blocking=True):
-	# 	if not blocking and self.frame_queue.empty():
-	# 		return None
-	# 	else:
-	# 		self.capture_fps.update()
-	# 		frame = self.frame_queue.get()
-	# 		if self.capture_raw:
-	# 			img = cv2.cvtColor(np.frombuffer(frame.data, dtype=np.uint8).reshape((1200,1600,2)), cv2.COLOR_YUV2GRAY_YUYV)
-	# 		else:
-	# 			img = np.frombuffer(frame.data, dtype=np.uint8)
-	# 			img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
-	# 		return img
-
-		# return self._next_frame()
-		# return self.last_frame
 
 	def _time_video_iter(self, N=100):
 		tic = time.time()

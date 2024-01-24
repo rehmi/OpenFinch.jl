@@ -66,20 +66,6 @@ class CameraServer:
 		self.display.display_image()
 		self.display.update()
   
-	async def send_fps_update(self):
-		try:
-			fps_data = {
-				'image_capture_reader_fps': self.cam.vidcap.reader_fps.get_fps(),
-				'image_capture_capture_fps': self.cam.vidcap.capture_fps.get_fps(),
-				'system_controller_fps': self.cam.fps_logger.get_fps()
-			}
-			# fps_data = {k: v for k, v in fps_data.items() if v is not None}
-			if fps_data:
-				tasks = [ws.send_str(json.dumps({'fps_update': fps_data}))
-							for ws in list(self.active_connections)]
-				await asyncio.gather(*tasks)
-		except Exception as e:
-			logging.exception("Exception in send_fps_update")
 
 	async def on_startup(self, app):
 		app['task'] = asyncio.create_task(self.periodic_task())
@@ -87,7 +73,7 @@ class CameraServer:
 	async def periodic_task(self):
 		while True:
 			try:
-				await self.send_captured_image(quality=self.jpeg_quality)
+				await self.send_captured_image()
 				await self.send_fps_update()
 				await asyncio.sleep(0.001)
 			except Exception as e:
@@ -110,51 +96,63 @@ class CameraServer:
 		return encodedImage.read()
 
 	async def send_str_and_bytes(self, ws, str_data, bytes_data):
+		await ws.send_str(str_data)
+		await ws.send_bytes(bytes_data)
+
+	async def send_str(self, ws, str_data):
+		await ws.send_str(str_data)
+
+	async def active_connection_wrapper(self, ws, func, *args):
 		try:
-			await ws.send_str(str_data)
-			await ws.send_bytes(bytes_data)
+			return await func(ws, *args)
 		except Exception as e:
-			logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
+			logging.info(f"active_connection_wrapper: error occurred on WebSocket {ws}: {e}")
 			try:
 				self.active_connections.remove(ws)
 			except KeyError:
 				pass
 
-	async def send_captured_image(self, width=None, height=None, quality=75):
-		if width is None:
-			width = self.img_width
-		if height is None:
-			height = self.img_height
+	async def broadcast_to_active_connections(self, func, *args):	
+		tasks = [
+			self.active_connection_wrapper(ws, func, *args)
+	   		for ws in list(self.active_connections) # Create a copy of the set to avoid modifying it while iterating
+		]
+
+		await asyncio.gather(*tasks)
+
+	async def send_captured_image(self):
 		frame = self.cam.capture_frame()
 		if frame is not None:
+			# Perform a camera sweep and update LED timing if the sweep is enabled, then update the wave.
+			# XXX This should be factored out of send_captured_image()
 			if self.sweep_enable:
 				self.cam.sweep()
 				await self.update_led_time(self.cam.config.LED_TIME)
 			self.cam.update_wave()
-	
-			# img = frame.to_grayscale()
-			# img_bin = self.image_to_blob(img, quality)
+			# XXX end section to be factored out
+
 			img_bin = frame.to_bytes()
-   
-			tasks = [self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
-							for ws in list(self.active_connections)] # Create a copy of the set to avoid modifying it while iterating
-			await asyncio.gather(*tasks)
+			await self.broadcast_to_active_connections(self.send_str_and_bytes, json.dumps({'image_response': {'image': 'next'}}), img_bin)
 
 	async def update_led_time(self, new_value):
-		for ws in list(self.active_connections): # Create a copy of the set to avoid modifying it while iterating
-			try:
-				await ws.send_str(json.dumps({'LED_TIME': {'value': new_value}}))
-			except Exception as e:
-				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
-				self.active_connections.remove(ws)
-	
+		await self.broadcast_to_active_connections(self.send_str, json.dumps({'LED_TIME': {'value': new_value}}))
+
 	async def update_control_value(self, control_name, new_value):
-		for ws in list(self.active_connections):  # Create a copy of the set to avoid modifying it while iterating
-			try:
-				await ws.send_str(json.dumps({control_name: {'value': new_value}}))
-			except Exception as e:
-				logging.info(f"Error occurred while sending data on WebSocket {ws}: {e}")
-				self.active_connections.remove(ws)
+		await self.broadcast_to_active_connections(self.send_str, json.dumps({control_name: {'value': new_value}}))
+
+	async def send_fps_update(self):
+		try:
+			fps_data = {
+				'image_capture_reader_fps': self.cam.vidcap.reader_fps.get_fps(),
+				'image_capture_capture_fps': self.cam.vidcap.capture_fps.get_fps(),
+				'system_controller_fps': self.cam.fps_logger.get_fps()
+			}
+			if fps_data:
+				await self.broadcast_to_active_connections(
+					self.send_str, json.dumps({'fps_update': fps_data})
+				)
+		except Exception as e:
+			logging.exception("Exception in send_fps_update")
 
 	async def handle_camera_control(self, control_name, control_data):
 		value = int(control_data.get('value', 0))
@@ -167,11 +165,12 @@ class CameraServer:
 			setattr(self.cam.config, control_name, value)
 			self.cam.update_wave()
 
-	async def handle_message(self, request):
+	async def handle_ws(self, request):
 		ws = web.WebSocketResponse()
 		self.active_connections.add(ws)
 		await ws.prepare(request)
 
+		# start a handler loop that persists as long as the websocket
 		async for msg in ws:
 			if msg.type == web.WSMsgType.TEXT:
 				data = json.loads(msg.data)
@@ -191,6 +190,7 @@ class CameraServer:
 					self.display.move_to_monitor(self.monitor_index)
 					self.update_display(img)
 		
+		# the websocket has closed or an error occurred.
 		self.active_connections.remove(ws)
 
 	async def handle_image_request(self, image_request, ws):

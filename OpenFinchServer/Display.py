@@ -45,7 +45,7 @@ class Display:
 	def move(self, x, y):
 		monitor = get_monitors()[self.monitor_index]
 		dx,dy = monitor.x,monitor.y
-		print(f"moving window to ({x}, {y}) + ({dx}, {dy}) = ({x+dx}, {y+dy})")
+		logging.info(f"moving window to ({x}, {y}) + ({dx}, {dy}) = ({x+dx}, {y+dy})")
 		cv2.moveWindow(self.window_name, x+dx, y+dy)
 
 	def update(self):

@@ -2,9 +2,10 @@ import logging
 import time
 
 class FrameRateMonitor:
-	def __init__(self, label, period=5.0):
+	def __init__(self, label, period=1.0, alpha=0.8):
 		self.label = label
-		self.period=period
+		self.period = period
+		self.alpha = alpha
 		self.frame_count = 0
 		self.start_time = time.time()
 		self.latest_fps = 0
@@ -16,11 +17,13 @@ class FrameRateMonitor:
 	def increment(self):
 		self.frame_count += 1
 
-	def update(self):
+	def update(self, log=False):
 		self.increment()
 		if time.time() - self.start_time >= self.period:
-			fps = self.frame_count / (time.time() - self.start_time)
-			logging.info(f"{self.label}: average FPS {fps:.2f}")
+			cur_fps = self.frame_count / (time.time() - self.start_time)
+			fps = self.alpha*self.latest_fps + (1-self.alpha)*cur_fps
+			if log:
+				logging.info(f"{self.label}: average FPS {fps:.2f}")
 			self.latest_fps = fps
 			self.reset()
 

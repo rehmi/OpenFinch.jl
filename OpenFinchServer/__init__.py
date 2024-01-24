@@ -6,18 +6,17 @@ from .frame_rate_monitor import FrameRateMonitor, StatsMonitor
 from .ImageCapture import CapturedImage, ImageCapture
 from .system_controller import SystemController
 
-
-# Expose only the necessary classes/modules to the outside
+# Expose only the necessary classes and modules
 __all__ = [
 	'CameraControlDefaults',
- 	'ScriptStatus',
+	'ScriptStatus',
 	'TriggerConfig',
 	'PiGPIOScript',
 	'PiGPIOWave',
 	'CameraServer',
 	'Display',
 	'FrameRateMonitor',
- 	'StatsMonitor',
+	'StatsMonitor',
 	'CapturedImage',
 	'ImageCapture',
 	'SystemController',
