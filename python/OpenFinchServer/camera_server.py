@@ -56,6 +56,8 @@ class CameraServer:
 		self.display.update()
 		self.display.move_to_monitor(0)
 		self.display.update()
+		self.display.hide_window()
+		self.display.update()
 		# XXX end hack
   
 	def update_display(self, img):

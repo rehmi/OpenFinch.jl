@@ -133,30 +133,6 @@
 			box-sizing: border-box;
 		} */
 
-		/* Customizes the appearance of the webkit slider's track */
-		/* input[type=range]::-webkit-slider-runnable-track {
-			width: 100%;
-			height: 8px;
-			cursor: pointer;
-			animate: 0.2s;
-			box-shadow: 1px 1px 1px #000000;
-			background: #367ebd;
-			border-radius: 1.3px;
-			border: 0.2px solid #010101;
-		} */
-
-		/* Customizes the appearance of the webkit slider's thumb */
-		/* input[type=range]::-webkit-slider-thumb {
-			box-shadow: 1px 1px 1px #000000;
-			border: 1px solid #000000;
-			height: 36px;
-			width: 16px;
-			border-radius: 3px;
-			background: #ffffff;
-			cursor: pointer;
-			-webkit-appearance: none;
-			margin-top: -14px;
-		} */
 
 		/* Removes the focus outline from the range inputs */
 		input[type=range]:focus {
@@ -168,128 +144,12 @@
 			background: #367ebd;
 		} */
 
-		/* Styles the range track for Mozilla browsers */
-		/* input[type=range]::-moz-range-track {
-			width: 100%;
-			height: 8px;
-			cursor: pointer;
-			animate: 0.2s;
-			box-shadow: 1px 1px 1px #000000;
-			background: #367ebd;
-			border-radius: 1.3px;
-			border: 0.2px solid #010101;
-		} */
 
-		/* Styles the range thumb for Mozilla browsers */
-		/* input[type=range]::-moz-range-thumb {
-			box-shadow: 1px 1px 1px #000000;
-			border: 1px solid #000000;
-			height: 36px;
-			width: 16px;
-			border-radius: 3px;
-			background: #ffffff;
-			cursor: pointer;
-		} */
-
-		/* Defines the track of the slider for Microsoft browsers */
-		/* input[type=range]::-ms-track {
-			width: 100%;
-			height: 8px;
-			cursor: pointer;
-			animate: 0.2s;
-			background: transparent;
-			border-color: transparent;
-			color: transparent;
-		} */
-
-		/* Styles the lower fill of the slider for Microsoft browsers */
-		/* input[type=range]::-ms-fill-lower {
-			background: #2a6495;
-			border: 0.2px solid #010101;
-			border-radius: 2.6px;
-			box-shadow: 1px 1px 1px #000000;
-		} */
-
-		/* Styles the upper fill of the slider for Microsoft browsers */
-		/* input[type=range]::-ms-fill-upper {
-			background: #367ebd;
-			border: 0.2px solid #010101;
-			border-radius: 2.6px;
-			box-shadow: 1px 1px 1px #000000;
-		} */
-
-		/* Styles the thumb of the slider for Microsoft browsers */
-		/* input[type=range]::-ms-thumb {
-			box-shadow: 1px 1px 1px #000000;
-			border: 1px solid #000000;
-			height: 36px;
-			width: 16px;
-			border-radius: 3px;
-			background: #ffffff;
-			cursor: pointer;
-		} */
-
-		/* Enhances the focus state for the lower fill of the slider for Microsoft browsers */
-		/* input[type=range]:focus::-ms-fill-lower {
-			background: #3071a9;
-		} */
-
-		/* Enhances the focus state for the upper fill of the slider for Microsoft browsers */
-		/* input[type=range]:focus::-ms-fill-upper {
-			background: #367ebd;
-		} */
-
-		/* Provides default styling for checkboxes */
-		/* input[type=checkbox] {
-			display: block;
-			margin: 10px 0;
-		} */
-
-		/* Styles the button element with padding, color, and interaction */
-		/* button {
-			padding: 10px 10px;
-			background-color: #367ebd;
-			color: #fff;
-			border: none;
-			border-radius: 5px;
-			cursor: pointer;
-		} */
-
-		/* Changes the button's background color on hover for better interaction */
-		/* button:hover {
-			background-color: #2a6495;
-		} */
 	</style>
 </head>
 
 <body>
 	<h1>OpenFinch dashboard</h1>
-
-	<!--
-		Here's is a list of OV2311 v4l2 controls:
-
-                     brightness 0x00980900 (int)    : min=-64 max=64 step=1 default=0 value=0
-                       contrast 0x00980901 (int)    : min=0 max=64 step=1 default=32 value=32
-                     saturation 0x00980902 (int)    : min=0 max=128 step=1 default=64 value=0
-                            hue 0x00980903 (int)    : min=-40 max=40 step=1 default=0 value=1
- white_balance_temperature_auto 0x0098090c (bool)   : default=1 value=1
-                          gamma 0x00980910 (int)    : min=72 max=500 step=1 default=100 value=100
-                           gain 0x00980913 (int)    : min=0 max=100 step=1 default=0 value=0
-           power_line_frequency 0x00980918 (menu)   : min=0 max=2 default=2 value=0
-                                0: Disabled
-                                1: 50 Hz
-                                2: 60 Hz
-      white_balance_temperature 0x0098091a (int)    : min=2800 max=6500 step=1 default=4600 value=4600 flags=inactive
-                      sharpness 0x0098091b (int)    : min=0 max=6 step=1 default=3 value=6
-         backlight_compensation 0x0098091c (int)    : min=0 max=2 step=1 default=1 value=0
-                  exposure_auto 0x009a0901 (menu)   : min=0 max=3 default=3 value=1
-                                1: Manual Mode
-                                3: Aperture Priority Mode
-              exposure_absolute 0x009a0902 (int)    : min=1 max=5000 step=1 default=157 value=66
-         exposure_auto_priority 0x009a0903 (bool)   : default=0 value=1
-	 -->
-
-	<!-- Checkbox for camera mode -->
 	<div class="controls-wrapper">
 		<div class="control-container">
 			<div class="checkbox-decorated">
@@ -417,7 +277,7 @@
 	<div style="position: relative;">
 		<img id="image" alt="image">
 		<div style="position: absolute; bottom: 0%; left: 6%; z-index: 10;">
-			<p style="color: hsl(120, 100%, 50%); text-shadow: rgb(0, 0, 0) 0px 0px 10px;">
+			<p style="color: hsl(0, 0%, 0%); text-shadow: rgb(255, 255, 255) 0px 0px 15px;">
 				Reader/Capture/Controller fps:
 				<span id="image_capture_reader_fps">0</span> /
 				<span id="image_capture_capture_fps">0</span> /
