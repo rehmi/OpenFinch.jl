@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 from screeninfo import get_monitors
 import v4l2py
+from picamera2 import Picamera2, Preview, Metadata
+import libcamera
+from libcamera import controls
 import time
 import os
 import io
@@ -42,28 +45,27 @@ class CapturedImage:
 	def to_bytes(self):
 		return self.frame.data
 
-class ImageCapture:
-	def __init__(self, device_path='/dev/video0', capture_raw=False, controls={}):
-		self.device_path = device_path
-		self.capture_raw = capture_raw
+import v4l2py
+
+class V4L2CameraController:
+	def __init__(self, device_id='/dev/video0', controls={}):
+		if type(device_id) == int:
+			self.device_path = f"/dev/video{device_id}"
+		else:
+			self.device_path = device_id
 		self.device = v4l2py.Device(self.device_path)
 		self.video = v4l2py.VideoCapture(self.device)
 		self.iter_video = iter(self.video)
+		self.control_values = controls
 
-		if capture_raw:
-			subprocess.call(['v4l2-ctl', '--set-fmt-video=width=1600,height=1200,pixelformat=YUYV'])
-		else:
-			subprocess.call(['v4l2-ctl', '--set-fmt-video=width=1600,height=1200,pixelformat=MJPG'])
-		
 		self.device.open()
 
-		for control_name, value in controls.items():
-			self.control_set(control_name, value)
+		for control_name, value in self.control_values.items():
+			self.set_control(control_name, value)
 
 		self.frame_queue = queue.Queue(maxsize=1)
 		self.running = False
-		self.reader_fps = FrameRateMonitor("ImageCapture reader", 1)
-		self.capture_fps = FrameRateMonitor("ImageCapture capture", 1)
+		self.reader_fps = FrameRateMonitor("V4L2CameraController:reader", 1)
 
 	def _start_reader(self):
 		self.running = True
@@ -77,27 +79,6 @@ class ImageCapture:
 			if not self.frame_queue.full():
 				self.frame_queue.put(frame)
 
-	def capture_frame(self, blocking=True):
-		if not blocking and self.frame_queue.empty():
-			return None
-		else:
-			self.capture_fps.update()
-			frame = self.frame_queue.get()
-			cap = CapturedImage(frame)
-			return cap
-
-	def capture_raw(self, blocking=True):
-			cap = self.capture_frame(blocking=blocking)
-			return cap.to_bytes()
-
-	def capture_rgb(self, blocking=True):
-			cap = self.capture_frame(blocking=blocking)
-			return cap.to_rgb()
-
-	def capture_grayscale(self, blocking=True):
-			cap = self.capture_frame(blocking=blocking)
-			return cap.to_grayscale()
-
 	def _time_video_iter(self, N=100):
 		tic = time.time()
 		for _ in range(N):
@@ -110,15 +91,90 @@ class ImageCapture:
 		self.running = False
 		self.thread.join()
 
+
+	def capture_frame(self, blocking=True):
+		if not blocking and self.frame_queue.empty():
+			return None
+		else:
+			frame = self.frame_queue.get()
+			cap = CapturedImage(frame)
+			return cap
+
+
+	def set_format(self, width, height, pixel_format):
+		subprocess.call([
+			'v4l2-ctl',
+			'--set-fmt-video=width={width},height={height},pixelformat={pixel_format}'.format(
+				width=width, height=height, pixel_format=pixel_format)
+		])
+
 	def open(self):
-		# self.device.open()
 		self.video.open()
 		self._start_reader()
 
 	def close(self):
 		self._stop_reader()
 		self.video.close()
-		# self.device.close()
+
+	def read_frame(self):
+		return next(iter(self.video))
+
+	def get_control(self, control_name):
+		try:
+			return self.device.controls[control_name]
+		except KeyError:
+			raise AttributeError(f"Control '{control_name}' does not exist.")
+
+	def set_control(self, control_name, value):
+		try:
+			control = self.device.controls[control_name]
+			# You may need to check the control type and range before setting it
+			control.value = value
+		except KeyError:
+			raise AttributeError(f"Control '{control_name}' does not exist.")
+
+
+class ImageCapture:
+	def __init__(self, device_id=0, capture_raw=False, controls={}):
+		self.capture_raw = capture_raw
+		self.device = V4L2CameraController(device_id, controls)
+		self.reader_fps = self.device.reader_fps
+
+		pixel_format = 'YUYV' if capture_raw else 'MJPG'
+		self.device.set_format(width=1600, height=1200, pixel_format=pixel_format)
+
+		for control_name, value in controls.items():
+			self.control_set(control_name, value)
+
+		self.capture_fps = FrameRateMonitor("ImageCapture:capture", 1)
+
+	def capture_frame(self, blocking=True):
+		cap = self.device.capture_frame(blocking=blocking)
+		if cap is not None:
+			self.capture_fps.update()
+		return cap
+
+	def capture_raw(self, blocking=True):
+		cap = self.capture_frame(blocking=blocking)
+		return cap.to_bytes()
+
+	def capture_rgb(self, blocking=True):
+		cap = self.capture_frame(blocking=blocking)
+		return cap.to_rgb()
+
+	def capture_grayscale(self, blocking=True):
+		cap = self.capture_frame(blocking=blocking)
+		return cap.to_grayscale()
+
+	def open(self):
+		self.device.open()
+		# self.video.open()
+		# self._start_reader()
+
+	def close(self):
+		# self._stop_reader()
+		# self.video.close()
+		self.device.close()
 
 	# def __del__(self):
 		# self.device.close()
@@ -130,21 +186,7 @@ class ImageCapture:
 		return self.device.controls[control_name]
 
 	def control_set(self, control_name, value):
-		try:
-			control = self.device.controls[control_name]
-			if isinstance(control, v4l2py.device.IntegerControl):
-				if not control.minimum <= value <= control.maximum:
-					raise ValueError(f"Value '{value}' is outside the allowable range for control '{control_name}'.")
-			elif isinstance(control, v4l2py.device.BooleanControl):
-				if value not in [True, False]:
-					raise ValueError(f"Value '{value}' is not a valid boolean value.")
-			# Add checks for other control types as needed
-			control.value = value
-		except KeyError:
-			raise AttributeError(f"Control '{control_name}' does not exist.")
+		return self.device.set_control(control_name, value)
 
 	def control_get(self, control_name):
-		try:
-			return self.device.controls[control_name]
-		except KeyError:
-			raise AttributeError(f"Control '{control_name}' does not exist.")
+		return self.device.get_control(control_name)
