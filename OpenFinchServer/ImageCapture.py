@@ -19,6 +19,7 @@ from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
 class ImageCapture:
 	def __init__(self, device_id=0, capture_raw=False, controls={}):
 		self.capture_raw = capture_raw
+		self.capture_fps = FrameRateMonitor("ImageCapture:capture", 1)
   
 		if False:
 			self.device = V4L2CameraController(device_id, controls)
@@ -32,8 +33,12 @@ class ImageCapture:
 
 		else:
 			self.device = Picamera2Controller(device_id, controls)
-
-		self.capture_fps = FrameRateMonitor("ImageCapture:capture", 1)
+   
+	def get_capture_fps(self):
+		return self.capture_fps.get_fps()
+  
+	def get_reader_fps(self):
+		return self.device.reader_fps.get_fps()
 
 	def capture_frame(self, blocking=True):
 		cap = self.device.capture_frame(blocking=blocking)

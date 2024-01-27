@@ -143,14 +143,13 @@ class CameraServer:
 	async def send_fps_update(self):
 		try:
 			fps_data = {
-				'image_capture_reader_fps': self.cam.vidcap.reader_fps.get_fps(),
-				'image_capture_capture_fps': self.cam.vidcap.capture_fps.get_fps(),
-				'system_controller_fps': self.cam.fps_logger.get_fps()
+				'image_capture_reader_fps': self.cam.get_reader_fps(),
+				'image_capture_capture_fps': self.cam.get_capture_fps(),
+				'system_controller_fps': self.cam.get_controller_fps()
 			}
-			if fps_data:
-				await self.broadcast_to_active_connections(
-					self.send_str, json.dumps({'fps_update': fps_data})
-				)
+			await self.broadcast_to_active_connections(
+				self.send_str, json.dumps({'fps_update': fps_data})
+			)
 		except Exception as e:
 			logging.exception("Exception in send_fps_update")
 

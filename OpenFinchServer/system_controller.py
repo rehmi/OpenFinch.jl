@@ -42,6 +42,15 @@ class SystemController:
 
 	def __del__(self):
 		self.shutdown()
+  
+	def get_capture_fps(self):
+		return self.vidcap.get_capture_fps()
+  
+	def get_controller_fps(self):
+		return self.fps_logger.get_fps()
+		
+	def get_reader_fps(self):
+		return self.vidcap.get_reader_fps()
 
 	def shutdown(self):
 		try:
@@ -107,4 +116,3 @@ class SystemController:
 		self.config.LED_TIME += self.dt
 		if self.config.LED_TIME > self.t_max:
 			self.config.LED_TIME = self.t_min
-   

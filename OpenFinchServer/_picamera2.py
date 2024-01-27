@@ -48,10 +48,15 @@ class Picamera2Controller:
 		self.reader_fps = FrameRateMonitor("Picamera2Controller:reader", 1)
 		self.capture_config = self.device.create_still_configuration()
 		self.preview_config = self.device.create_preview_configuration()
+		self.set_capture_mode()
+		# picamera2 likes to log a lot of things
+		logger = logging.getLogger('picamera2.request')
+		logger.setLevel(logging.WARNING)
 
 	def capture_frame(self, blocking=True):
 		data = io.BytesIO()
 		self.device.capture_file(data, format='jpeg')
+		self.reader_fps.update()
 		return Picamera2CapturedImage(data)
 
 	def set_control(self, control_name, value):
@@ -78,8 +83,8 @@ class Picamera2Controller:
 	def close(self):
 		self.device.stop()
 		
-	def set_capture_mode():
+	def set_capture_mode(self):
 		self.device.switch_mode(self.capture_config)
 
-	def set_preview_mode():
+	def set_preview_mode(self):
 		self.device.switch_mode(self.preview_config)
