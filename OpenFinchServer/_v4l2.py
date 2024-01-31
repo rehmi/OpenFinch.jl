@@ -15,6 +15,8 @@ import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
 
+from .OV2311 import OV2311Defaults
+
 class V4L2CapturedImage:
 	def __init__(self, frame, metadata={}):
 		self.frame = frame
@@ -50,7 +52,7 @@ class V4L2CapturedImage:
 import v4l2py
 
 class V4L2CameraController:
-	def __init__(self, device_id='/dev/video0', controls={}):
+	def __init__(self, device_id='/dev/video0', controls=OV2311Defaults):
 		if type(device_id) == int:
 			self.device_path = f"/dev/video{device_id}"
 		else:

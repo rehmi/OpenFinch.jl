@@ -179,7 +179,7 @@ class CameraServer:
 						await handler(data[key])
 
 				if 'image_request' in data:
-					self.handle_image_request(data, ws)
+					await self.handle_image_request(data, ws)
 
 				if data.get('SLM_image', '') == 'next':
 					image_blob = await ws.receive_bytes()
@@ -196,6 +196,7 @@ class CameraServer:
 		# XXX this used to work but now that send_captured_image()
 		# broadcasts to all connections we need to refactor it
 		# await self.send_captured_image(ws)
+		logging.info(f"CameraServer.handle_image_request() was called")
 		return
 
 	async def handle_sweep_enable(self, sweep_enable):

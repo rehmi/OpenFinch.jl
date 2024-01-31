@@ -14,6 +14,8 @@ import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
 
+from .IMX296 import IMX296Defaults
+
 class Picamera2CapturedImage:
 	def __init__(self, frame, metadata={}):
 		self.frame = frame
@@ -41,50 +43,54 @@ import v4l2py
 
 class Picamera2Controller:
 	def __init__(self, device_id=0, controls={}):
-		self.device = Picamera2()
-		self.device.configure("still")
-		self.device.start()
+		self.picam2 = Picamera2()
+		self.picam2.configure("still")
+		self.picam2.start()
 		self.controls = controls
 		self.reader_fps = FrameRateMonitor("Picamera2Controller:reader", 1)
-		self.capture_config = self.device.create_still_configuration()
-		self.preview_config = self.device.create_preview_configuration()
-		self.set_capture_mode()
+		self.capture_config = self.picam2.create_still_configuration()
+		self.preview_config = self.picam2.create_preview_configuration()
+		self.video_config = self.picam2.create_video_configuration()
+		self.set_video_mode()
 		# picamera2 likes to log a lot of things
 		logger = logging.getLogger('picamera2.request')
 		logger.setLevel(logging.WARNING)
 
 	def capture_frame(self, blocking=True):
 		data = io.BytesIO()
-		self.device.capture_file(data, format='jpeg')
+		self.picam2.capture_file(data, format='jpeg')
 		self.reader_fps.update()
 		return Picamera2CapturedImage(data)
 
 	def set_control(self, control_name, value):
 		try:
-			self.device.set_controls({control_name: value})
-		except KeyError:
+			self.picam2.set_controls({control_name: value})
+		except Exception as e:
 			# raise AttributeError(f"Control '{control_name}' does not exist.")
-			logging.exception(f"Control '{control_name}' does not exist.")
+			logging.exception(f"Control '{control_name}'")
 		finally:
 			return False
 
 	def get_control(self, control_name):
 		try:
-			return self.device.controls[control_name]
-		except KeyError:
+			return self.picam2.controls[control_name]
+		except Exception as e:
 			# raise AttributeError(f"Control '{control_name}' does not exist.")
-			logging.exception(f"Control '{control_name}' does not exist.")
+			logging.exception(f"Control '{control_name}'")
 		finally:
 			return False
 
 	def open(self):
-		self.device.start()
+		self.picam2.start()
 
 	def close(self):
-		self.device.stop()
+		self.picam2.stop()
 		
 	def set_capture_mode(self):
-		self.device.switch_mode(self.capture_config)
+		self.picam2.switch_mode(self.capture_config)
 
 	def set_preview_mode(self):
-		self.device.switch_mode(self.preview_config)
+		self.picam2.switch_mode(self.preview_config)
+
+	def set_video_mode(self):
+		self.picam2.switch_mode(self.video_config)

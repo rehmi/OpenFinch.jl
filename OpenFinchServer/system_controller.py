@@ -6,7 +6,7 @@ import pigpio
 
 from .ImageCapture import ImageCapture
 from .CameraControl import start_pig, trigger_wave_script, TriggerConfig
-from .CameraControl import PiGPIOScript, PiGPIOWave, CameraControlDefaults
+from .CameraControl import PiGPIOScript, PiGPIOWave
 from .frame_rate_monitor import FrameRateMonitor
 
 class SystemController:
@@ -26,8 +26,7 @@ class SystemController:
 
 		# Now initialize the rest of the components that depend on the config
 		self.pig = start_pig()
-		control_defaults = CameraControlDefaults()
-		self.vidcap = ImageCapture(capture_raw=False, controls=control_defaults)
+		self.vidcap = ImageCapture(capture_raw=False)
 		self.vidcap.open()
 		self.initialize_trigger()
 
