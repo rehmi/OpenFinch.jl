@@ -7,6 +7,8 @@ from .ImageCapture import ImageCapture
 from ._v4l2 import V4L2CapturedImage, V4L2CameraController
 from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
 from .system_controller import SystemController
+from .wavegen import WaveGen
+
 
 from .OV2311 import OV2311Defaults
 
@@ -16,6 +18,7 @@ __all__ = [
 	'TriggerConfig',
 	'PiGPIOScript',
 	'PiGPIOWave',
+	'WaveGen',
 	'CameraServer',
 	'Display',
 	'FrameRateMonitor',
