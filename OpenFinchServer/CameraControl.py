@@ -31,9 +31,9 @@ class TriggerConfig:
     
     TRIG_TIME: int = 0
     TRIG_WIDTH: int = 10
-    LED_TIME: int = 1000
-    LED_WIDTH: int = 20
-    WAVE_DURATION: int = 33400
+    LED_TIME: int = 400
+    LED_WIDTH: int = 4
+    WAVE_DURATION: int = 8000
 
 class PiGPIOScript:
     def __init__(self, pig, text=None, id=None):
@@ -162,27 +162,27 @@ class PiGPIOWave:
         cf = self.config
 
         # Define the initial state of the pins
-        self.wavegen.change_bit(cf.TRIG_OUT, 0, 0)
-        self.wavegen.change_bit(cf.RED_OUT, 0, 0)
-        self.wavegen.change_bit(cf.GRN_OUT, 0, 0)
-        self.wavegen.change_bit(cf.BLU_OUT, 0, 0)
-        self.wavegen.change_bit(cf.LED_OUT, 0, 0)
+        # self.wavegen.change_bit(cf.TRIG_OUT, 0, 0)
+        # self.wavegen.change_bit(cf.RED_OUT, 0, 0)
+        # self.wavegen.change_bit(cf.GRN_OUT, 0, 0)
+        # self.wavegen.change_bit(cf.BLU_OUT, 0, 0)
+        # self.wavegen.change_bit(cf.LED_OUT, 0, 0)
 
         # Define the trigger pulse
         self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME)
         self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME + cf.TRIG_WIDTH)
 
         # Define the LED pulse
-        self.wavegen.change_bit(cf.BLU_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH + cf.LED_TIME)
-        self.wavegen.change_bit(cf.BLU_OUT, 0, cf.TRIG_TIME + cf.TRIG_WIDTH + cf.LED_TIME + cf.LED_WIDTH)
+        self.wavegen.change_bit(cf.BLU_OUT, 1, cf.LED_TIME)
+        self.wavegen.change_bit(cf.BLU_OUT, 0, cf.LED_TIME + cf.LED_WIDTH)
 
         # Define the LED pulse
-        self.wavegen.change_bit(cf.GRN_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH + cf.LED_TIME + 8333//3)
-        self.wavegen.change_bit(cf.GRN_OUT, 0, cf.TRIG_TIME + cf.TRIG_WIDTH + cf.LED_TIME + 8333//3 + cf.LED_WIDTH*3)
+        self.wavegen.change_bit(cf.GRN_OUT, 1, cf.LED_TIME + 8333//3)
+        self.wavegen.change_bit(cf.GRN_OUT, 0, cf.LED_TIME + 8333//3 + cf.LED_WIDTH*3)
 
         # Define the LED pulse
-        self.wavegen.change_bit(cf.RED_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH + cf.LED_TIME + 2*8333//3)
-        self.wavegen.change_bit(cf.RED_OUT, 0, cf.TRIG_TIME + cf.TRIG_WIDTH + cf.LED_TIME + 2*8333//3 + cf.LED_WIDTH)
+        self.wavegen.change_bit(cf.RED_OUT, 1, cf.LED_TIME + 2*8333//3)
+        self.wavegen.change_bit(cf.RED_OUT, 0, cf.LED_TIME + 2*8333//3 + cf.LED_WIDTH)
 
 		# Add a final event to pad to desired duration
         self.wavegen.change_bit(cf.LED_OUT, 0, cf.WAVE_DURATION)
@@ -196,14 +196,7 @@ class PiGPIOWave:
         return self.pig.wave_create()
     
     def old_generate_wave(self):
-        cf = self.config
-
-        for pin in [cf.TRIG_OUT, cf.RED_OUT, cf.GRN_OUT, cf.BLU_OUT, cf.LED_OUT]:
-            self.pig.set_mode(pin, pigpio.OUTPUT)
-
-        for pin in [cf.TRIG_IN, cf.LED_IN, cf.STROBE_IN]:
-            self.pig.set_mode(pin, pigpio.INPUT)
-
+        self.configure_io()
         dtled = max(0, cf.LED_TIME - cf.TRIG_WIDTH - cf.TRIG_TIME)
         dtif = max(0, cf.WAVE_DURATION - cf.LED_TIME - cf.LED_WIDTH - cf.TRIG_TIME - cf.TRIG_WIDTH)
 
@@ -235,7 +228,7 @@ tag 100
     lda p0         		# load the current value of p0
     or 0 jp 101    		# if p0 is valid (>=0), proceed
     ld p3 0				# status: sequencing paused
-    mils 1      		# otherwise delay for a bit
+    mics 100      		# otherwise delay for a bit
     jmp 100       		# and try again
 
 # 	ld p3 2 			# status: waiting for p2 low
