@@ -11,21 +11,36 @@ class ScriptStatus(Enum):
     WAITING = 3
     FAILED = 4
 
+# Sequential field color timing
+# Field order: B 2742µs G 2777µs R 2749µs B 2742µs G 2777µs R 2883µs B ...
+# BLU low to GRN low = 2742 us
+# GRN low to RED low = 2777 us
+# RED low to BLU low = 2749, 2883 us (alternating)
+# BLU low to BLU low = 8264, 8403 us (sum is 16667 us)
+
 @dataclass(frozen=False)
 class TriggerConfig:
-    RED_IN: int = 25
+    RED_IN: int = 22
     GRN_IN: int = 24
-    BLU_IN: int = 22
+    BLU_IN: int = 25
 
     RED_OUT: int = 17
     GRN_OUT: int = 27
     BLU_OUT: int = 23
+    
+    RED_FACTOR: float = 1
+    GRN_FACTOR: float = 3
+    BLU_FACTOR: float = 1
+    
+    TRIG_IN: int = BLU_IN
+    BLU_START: int = 0
+    GRN_START: int = 2742
+    RED_START: int = 2742 + 2777
 
     TRIG_OUT: int = 5
     STROBE_IN: int = 6
 
-    TRIG_IN: int = RED_IN
-    LED_IN: int = BLU_IN
+    LED_IN: int = TRIG_IN
     LED_OUT: int = RED_OUT
     TRIG_OUT: int = TRIG_OUT
     
@@ -160,6 +175,14 @@ class PiGPIOWave:
 
     def generate_wave(self):
         cf = self.config
+        
+        RED_WIDTH = cf.RED_FACTOR * cf.LED_WIDTH
+        GRN_WIDTH = cf.GRN_FACTOR * cf.LED_WIDTH
+        BLU_WIDTH = cf.BLU_FACTOR * cf.LED_WIDTH
+        
+        RED_TIME = cf.LED_TIME + cf.RED_START
+        GRN_TIME = cf.LED_TIME + cf.GRN_START
+        BLU_TIME = cf.LED_TIME + cf.BLU_START
 
         # Define the initial state of the pins
         # self.wavegen.change_bit(cf.TRIG_OUT, 0, 0)
@@ -168,49 +191,32 @@ class PiGPIOWave:
         # self.wavegen.change_bit(cf.BLU_OUT, 0, 0)
         # self.wavegen.change_bit(cf.LED_OUT, 0, 0)
 
-        # Define the trigger pulse
+        # Camera trigger puls
         self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME)
         self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME + cf.TRIG_WIDTH)
 
-        # Define the LED pulse
-        self.wavegen.change_bit(cf.BLU_OUT, 1, cf.LED_TIME)
-        self.wavegen.change_bit(cf.BLU_OUT, 0, cf.LED_TIME + cf.LED_WIDTH)
+        # RED LED pulse
+        self.wavegen.change_bit(cf.RED_OUT, 1, RED_TIME)
+        self.wavegen.change_bit(cf.RED_OUT, 0, RED_TIME + RED_WIDTH)
 
-        # Define the LED pulse
-        self.wavegen.change_bit(cf.GRN_OUT, 1, cf.LED_TIME + 8333//3)
-        self.wavegen.change_bit(cf.GRN_OUT, 0, cf.LED_TIME + 8333//3 + cf.LED_WIDTH*3)
+        # GRN LED pulse
+        self.wavegen.change_bit(cf.GRN_OUT, 1, GRN_TIME)
+        self.wavegen.change_bit(cf.GRN_OUT, 0, GRN_TIME + GRN_WIDTH)
 
-        # Define the LED pulse
-        self.wavegen.change_bit(cf.RED_OUT, 1, cf.LED_TIME + 2*8333//3)
-        self.wavegen.change_bit(cf.RED_OUT, 0, cf.LED_TIME + 2*8333//3 + cf.LED_WIDTH)
+        # BLU LED pulse
+        self.wavegen.change_bit(cf.BLU_OUT, 1, BLU_TIME)
+        self.wavegen.change_bit(cf.BLU_OUT, 0, BLU_TIME + BLU_WIDTH)
 
-		# Add a final event to pad to desired duration
-        self.wavegen.change_bit(cf.LED_OUT, 0, cf.WAVE_DURATION)
+        # Add a final event to pad to desired duration
+        self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.WAVE_DURATION)
         
         # Convert the wavegen changes to pigpio wave format
-        wave = []
-        for set_mask, clr_mask, delay in self.wavegen.wave_vector:
-            wave.extend([pigpio.pulse(set_mask, clr_mask, delay)])
+        wave = [
+            pigpio.pulse(set_mask, clr_mask, delay)
+            for set_mask, clr_mask, delay in self.wavegen.wave_vector
+        ]
 
         self.pig.wave_add_generic(wave)
-        return self.pig.wave_create()
-    
-    def old_generate_wave(self):
-        self.configure_io()
-        dtled = max(0, cf.LED_TIME - cf.TRIG_WIDTH - cf.TRIG_TIME)
-        dtif = max(0, cf.WAVE_DURATION - cf.LED_TIME - cf.LED_WIDTH - cf.TRIG_TIME - cf.TRIG_WIDTH)
-
-        LED_ON_HIGH = cf.LED_MASK
-        LED_ON_LOW = 0
-        LED_OFF_HIGH = 0
-        LED_OFF_LOW = cf.LED_MASK
-
-        self.wave.append(pigpio.pulse(0, 0, cf.TRIG_TIME))
-        self.wave.append(pigpio.pulse(0, 1<<cf.TRIG_OUT, cf.TRIG_WIDTH))
-        self.wave.append(pigpio.pulse(1<<cf.TRIG_OUT, 0, dtled))
-        self.wave.append(pigpio.pulse(LED_ON_HIGH, LED_ON_LOW, cf.LED_WIDTH))
-        self.wave.append(pigpio.pulse(LED_OFF_HIGH, LED_OFF_LOW, dtif))
-        self.pig.wave_add_generic(self.wave)
         return self.pig.wave_create()
 
 
@@ -227,8 +233,8 @@ def trigger_wave_script(pig, config):
 tag 100
     lda p0         		# load the current value of p0
     or 0 jp 101    		# if p0 is valid (>=0), proceed
-    ld p3 0				# status: sequencing paused
-    mics 100      		# otherwise delay for a bit
+    # ld p3 0				# status: sequencing paused
+    # mics 100      		# otherwise delay for a bit
     jmp 100       		# and try again
 
 # 	ld p3 2 			# status: waiting for p2 low
@@ -238,29 +244,29 @@ tag 100
 # tag 111
 # 	r p2 jz 111			# wait for rising edge of p2
 
-    ld p3 4				# status: sequencing started
-    br1 sta v4			# capture starting GPIO in p4
-    tick sta v5			# capture the start time in p5
+    # ld p3 4				# status: sequencing started
+    # br1 sta v4			# capture starting GPIO in p4
+    # tick sta v5			# capture the start time in p5
 
 tag 101
     r p1 jz 101			# wait for p1 to go high
-    tick sta v6			# capture trigger high time in p6
+    # tick sta v6			# capture trigger high time in p6
 
-    ld p3 5
+    # ld p3 5
 tag 102
     r p1 jnz 102		# wait for falling edge on p1
-    br1 sta v7			# capture GPIO at trigger low in p7
-    tick sta v8			# capture trigger low time in p8
-    ld p3 6				# status: wave tx started
+    # br1 sta v7			# capture GPIO at trigger low in p7
+    # tick sta v8			# capture trigger low time in p8
+    # ld p3 6				# status: wave tx started
     wvtx p0				# trigger the wave
 
 tag 103
     wvbsy
     jnz 103 			# wait for wave to finish
-    tick sta v9			# capture wave finish time in p9
-    ld p3 7				# status: wave tx complete
-    ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
-    ld p3 8				# status: return params updated 
+    # tick sta v9			# capture wave finish time in p9
+    # ld p3 7				# status: wave tx complete
+    # ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
+    # ld p3 8				# status: return params updated 
 
     jmp 100				# do it again
     ret
