@@ -46,7 +46,7 @@ class CameraServer:
 			'exposure_auto_priority': lambda data: self.handle_camera_control('exposure_auto_priority', data),
 		}
   
-		self.initialize_display()
+		# self.initialize_display()
 
 	def initialize_display(self):
 		# Initialize display and script/wave-related components
