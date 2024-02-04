@@ -13,6 +13,7 @@ import subprocess
 import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
+from .camera_control_interface import CameraControllerInterface
 
 from .IMX296 import IMX296Defaults
 
@@ -39,17 +40,16 @@ class Picamera2CapturedImage:
     def to_bytes(self):
         return self.frame.getbuffer()
 
-class Picamera2Controller:
+class Picamera2Controller(CameraControllerInterface):
     def __init__(self, device_id=0, controls={}):
         self.picam2 = Picamera2()
-        self.picam2.configure("still")
-        self.picam2.start()
         self.controls = controls
         self.reader_fps = FrameRateMonitor("Picamera2Controller:reader", 1)
-        self.capture_config = self.picam2.create_still_configuration()
+        self.still_config = self.picam2.create_still_configuration()
         self.preview_config = self.picam2.create_preview_configuration()
         self.video_config = self.picam2.create_video_configuration()
-        self.set_video_mode()
+        self.picam2.start()
+        self.set_preview_mode()
         # picamera2 likes to log a lot of things
         logger = logging.getLogger('picamera2.request')
         logger.setLevel(logging.WARNING)
@@ -65,11 +65,14 @@ class Picamera2Controller:
 
     def _read_frames(self):
         while self.running:
-            data = io.BytesIO()
-            self.picam2.capture_file(data, format='jpeg')
-            self.reader_fps.update()
-            if not self.frame_queue.full():
-                self.frame_queue.put(Picamera2CapturedImage(data))
+            try:
+                data = io.BytesIO()
+                self.picam2.capture_file(data, format='jpeg')
+                self.reader_fps.update()
+                if not self.frame_queue.full():
+                    self.frame_queue.put(Picamera2CapturedImage(data))
+            except Exception as e:
+                logging.error(f"Error capturing frame: {e}")
 
     def _stop_reader(self):
         self.running = False
@@ -113,8 +116,9 @@ class Picamera2Controller:
             logging.exception(f"Control '{control_name}'")
         finally:
             return False
-    def set_capture_mode(self):
-        self.picam2.switch_mode(self.capture_config)
+        
+    def set_still_mode(self):
+        self.picam2.switch_mode(self.still_config)
 
     def set_preview_mode(self):
         self.picam2.switch_mode(self.preview_config)

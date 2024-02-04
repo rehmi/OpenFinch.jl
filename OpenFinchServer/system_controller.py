@@ -8,9 +8,11 @@ from .ImageCapture import ImageCapture
 from .CameraControl import start_pig, trigger_wave_script, TriggerConfig
 from .CameraControl import PiGPIOScript, PiGPIOWave
 from .frame_rate_monitor import FrameRateMonitor
+from .camera_control_interface import CameraControllerInterface
 
 class SystemController:
-    def __init__(self):
+    def __init__(self, camera_controller: CameraControllerInterface):
+        self.camera_controller = camera_controller
         # Initialize the configuration first
         self.config = TriggerConfig()
         self.config.TRIG_WIDTH = 10
@@ -26,10 +28,19 @@ class SystemController:
 
         # Now initialize the rest of the components that depend on the config
         self.pig = start_pig()
-        self.vidcap = ImageCapture(capture_raw=False)
+        self.vidcap = ImageCapture(camera_controller=self.camera_controller)
         self.vidcap.open()
         self.initialize_gpio()
         self.initialize_trigger()
+
+    def set_preview_mode(self):
+        self.camera_controller.set_preview_mode()
+
+    def set_still_mode(self):
+        self.camera_controller.set_still_mode()
+
+    def set_video_mode(self):
+        self.camera_controller.set_video_mode()
 
     def initialize_gpio(self):
         cf = self.config

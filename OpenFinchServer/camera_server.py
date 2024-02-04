@@ -10,12 +10,16 @@ import os
 
 from .Display import Display
 from .system_controller import SystemController
+from .camera_control_interface import CameraControllerInterface
+from ._picamera2 import Picamera2Controller
+from ._v4l2 import V4L2CameraController
 
 class CameraServer:
     def __init__(self):
         self.brightness, self.contrast, self.gamma = (0.5, 0.5, 1.0)
-        self.img_height, self.img_width = 1200, 1600
-        self.cam = SystemController()
+        # self.img_height, self.img_width = 1200, 1600
+        self.pcam = Picamera2Controller(device_id=0, controls={})
+        self.cam = SystemController(camera_controller=self.pcam)
         self.cam.set_cam_triggered()
         self.active_connections = set()
         self.sweep_enable = False
@@ -25,8 +29,9 @@ class CameraServer:
         self.handlers = {
             'sweep_enable':
                 lambda data: self.handle_sweep_enable(data),
+            'capture_mode': lambda data: self.handle_capture_mode(data),
             'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
-            'camera_mode': lambda data: self.handle_camera_mode(data),
+            'capture_mode': lambda data: self.handle_capture_mode(data),
 
             'LED_TIME': lambda data: self.handle_config_control('LED_TIME', data),
             'LED_WIDTH': lambda data: self.handle_config_control('LED_WIDTH', data),
@@ -173,11 +178,14 @@ class CameraServer:
         ws = web.WebSocketResponse()
         self.active_connections.add(ws)
         await ws.prepare(request)
+        logging.info(f"WebSocket connection established: {ws}")
 
         # start a handler loop that persists as long as the websocket
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
+                logging.info(f"Received message: {data}")  # Log the received message
+
     
                 for key, handler in self.handlers.items():
                     if key in data:
@@ -195,6 +203,7 @@ class CameraServer:
                     self.update_display(img)
         
         # the websocket has closed or an error occurred.
+        logging.info(f"WebSocket connection closed: {ws}")
         self.active_connections.remove(ws)
 
     async def handle_image_request(self, image_request, ws):
@@ -210,11 +219,21 @@ class CameraServer:
     async def handle_jpeg_quality(self, jpeg_quality):
         self.jpeg_quality = int(jpeg_quality.get('value', 10))
         
-    async def handle_camera_mode(self, camera_mode):
-        if camera_mode['value'] == 'freerunning':
+    async def handle_capture_mode(self, capture_mode):
+        if capture_mode['value'] == 'freerunning':
             self.cam.set_cam_freerunning()
         else:
             self.cam.set_cam_triggered()
+
+    async def handle_capture_mode(self, capture_mode):
+        mode = capture_mode.get('value', 'preview')
+        if mode == 'still':
+            self.cam.set_still_mode()
+        elif mode == 'preview':
+            self.cam.set_preview_mode()
+        elif mode == 'video':
+            self.cam.set_video_mode()
+        logging.info(f"Camera mode set to {mode}")
 
     async def handle_http(self, request):
         script_dir = os.path.dirname(__file__)
