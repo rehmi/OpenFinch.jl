@@ -228,15 +228,16 @@ def trigger_wave_script(pig, config):
     lda {config.TRIG_IN} sta p1
     lda {config.STROBE_IN} sta p2
 
-    ld p3 1				# status: starting
+    # ld p3 1				# status: starting
 
 tag 100
     lda p0         		# load the current value of p0
-    or 0 jp 101    		# if p0 is valid (>=0), proceed
+    or 0 jp 120    		# if p0 is valid (>=0), proceed
     # ld p3 0				# status: sequencing paused
-    # mics 100      		# otherwise delay for a bit
+	# changing the delay to <= 100 µs will increase pigpiod CPU use to > 100%
+    mics 101      		# otherwise delay for a bit
     jmp 100       		# and try again
-
+    
 # 	ld p3 2 			# status: waiting for p2 low
 # tag 110
 # 	r p2 jnz 110		# wait if p2 is high
@@ -248,21 +249,26 @@ tag 100
     # br1 sta v4			# capture starting GPIO in p4
     # tick sta v5			# capture the start time in p5
 
-tag 101
-    r p1 jz 101			# wait for p1 to go high
+tag 120
+    r p1 jnz 121        # read the GPIO and jump out of loop if it's high
+    mics 101           	# otherwise delay for a bit
+    jmp 120            	# and continue polling
+tag 121
     # tick sta v6			# capture trigger high time in p6
 
     # ld p3 5
-tag 102
-    r p1 jnz 102		# wait for falling edge on p1
+tag 130
+    r p1 jnz 130		# wait for falling edge on p1
+
+    wvtx p0				# trigger the wave
     # br1 sta v7			# capture GPIO at trigger low in p7
     # tick sta v8			# capture trigger low time in p8
     # ld p3 6				# status: wave tx started
-    wvtx p0				# trigger the wave
 
-tag 103
+tag 140
+	mics 101			# delay for a bit
     wvbsy
-    jnz 103 			# wait for wave to finish
+    jnz 140 			# wait for wave to finish
     # tick sta v9			# capture wave finish time in p9
     # ld p3 7				# status: wave tx complete
     # ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
