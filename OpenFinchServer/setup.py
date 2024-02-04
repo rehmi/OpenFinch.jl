@@ -7,17 +7,17 @@ setup(
     packages=find_packages(),
     install_requires=[
         'aiohttp',
-		'dataclasses',
-		'pillow',
-		'screeninfo',
-		'setuptools',
-		'asyncio',
-		'opencv-python',
-		'numpy',
-		'pigpio',
-		'requests',
-		'statistics',
-		'v4l2py'
+        'dataclasses',
+        'pillow',
+        'screeninfo',
+        'setuptools',
+        'asyncio',
+        'opencv-python',
+        'numpy',
+        'pigpio',
+        'requests',
+        'statistics',
+        'v4l2py'
     ],
     # entry_points={
     #     'console_scripts': [
