@@ -19,9 +19,9 @@ class SystemController:
         self.config.LED_TIME = 400
         self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
 
-        self.dt = 8333 // 333
         self.t_min = 0
-        self.t_max = 9333 + self.t_min
+        self.t_max = 2730
+        self.dt = (self.t_max - self.t_min) // 256
         self.fps_logger = FrameRateMonitor("SystemController", 1)
 
         # Now initialize the rest of the components that depend on the config
