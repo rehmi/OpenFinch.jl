@@ -1,9 +1,9 @@
 # __init__.py
-from .CameraControl import ScriptStatus, TriggerConfig, PiGPIOScript, PiGPIOWave
+from .sequencer import ScriptStatus, TriggerConfig, PiGPIOScript, PiGPIOWave
 from .camera_server import CameraServer
-from .Display import Display
+from .display import Display
 from .frame_rate_monitor import FrameRateMonitor, StatsMonitor
-from .ImageCapture import ImageCapture
+from .capture_controller import CaptureController
 from ._v4l2 import V4L2CapturedImage, V4L2CameraController
 from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
 from .system_controller import SystemController
@@ -24,7 +24,7 @@ __all__ = [
 	'Display',
 	'FrameRateMonitor',
 	'StatsMonitor',
-	'ImageCapture',
+	'CaptureController',
 	'V4L2CapturedImage',
  	'V4L2CameraController',
 	'Picamera2CapturedImage',

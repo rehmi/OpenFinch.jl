@@ -4,9 +4,9 @@ import logging
 import os
 import pigpio
 
-from .ImageCapture import ImageCapture
-from .CameraControl import start_pig, trigger_wave_script, TriggerConfig
-from .CameraControl import PiGPIOScript, PiGPIOWave
+from .capture_controller import CaptureController
+from .sequencer import start_pig, trigger_wave_script, TriggerConfig
+from .sequencer import PiGPIOScript, PiGPIOWave
 from .frame_rate_monitor import FrameRateMonitor
 from .abstract_camera import AbstractCameraController
 
@@ -28,7 +28,7 @@ class SystemController:
 
         # Now initialize the rest of the components that depend on the config
         self.pig = start_pig()
-        self.vidcap = ImageCapture(camera_controller=self.camera_controller)
+        self.vidcap = CaptureController(camera_controller=self.camera_controller)
         self.vidcap.open()
         self.initialize_gpio()
         self.initialize_trigger()

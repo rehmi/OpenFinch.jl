@@ -8,7 +8,7 @@ from io import BytesIO
 from aiohttp import web
 import os
 
-from .Display import Display
+from .display import Display
 from .system_controller import SystemController
 from .abstract_camera import AbstractCameraController
 from ._picamera2 import Picamera2Controller

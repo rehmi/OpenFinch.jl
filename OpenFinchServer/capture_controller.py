@@ -18,11 +18,11 @@ from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
 from .abstract_camera import AbstractCameraController
 from .abstract_camera import AbstractCameraController
 
-class ImageCapture:
+class CaptureController:
     # def __init__(self, device_id=0, capture_raw=False, controls={}):
     def __init__(self, camera_controller: AbstractCameraController):
         self.camera_controller = camera_controller
-        self.capture_fps = FrameRateMonitor("ImageCapture:capture", 1)
+        self.capture_fps = FrameRateMonitor("CaptureController:capture", 1)
 
         # if False:
         #     self.camera_controller = V4L2CameraController(device_id, controls)
@@ -63,22 +63,12 @@ class ImageCapture:
 
     def open(self):
         self.camera_controller.open()
-        # self.video.open()
-        # self._start_reader()
 
     def close(self):
-        # self._stop_reader()
-        # self.video.close()
         self.camera_controller.close()
 
-    # def __del__(self):
-        # self.camera_controller.close()
-    
     def get_controls(self):
         return self.camera_controller.get_controls
-
-    # def control(self, control_name):
-    #     return self.camera_controller.controls[control_name]
 
     def set_control(self, control_name, value):
         return self.camera_controller.set_control(control_name, value)
