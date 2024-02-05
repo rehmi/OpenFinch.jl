@@ -8,10 +8,10 @@ from .ImageCapture import ImageCapture
 from .CameraControl import start_pig, trigger_wave_script, TriggerConfig
 from .CameraControl import PiGPIOScript, PiGPIOWave
 from .frame_rate_monitor import FrameRateMonitor
-from .camera_control_interface import CameraControllerInterface
+from .abstract_camera import AbstractCameraController
 
 class SystemController:
-    def __init__(self, camera_controller: CameraControllerInterface):
+    def __init__(self, camera_controller: AbstractCameraController):
         self.camera_controller = camera_controller
         # Initialize the configuration first
         self.config = TriggerConfig()
@@ -33,14 +33,8 @@ class SystemController:
         self.initialize_gpio()
         self.initialize_trigger()
 
-    def set_preview_mode(self):
-        self.camera_controller.set_preview_mode()
-
-    def set_still_mode(self):
-        self.camera_controller.set_still_mode()
-
-    def set_video_mode(self):
-        self.camera_controller.set_video_mode()
+    def set_capture_mode(self, mode):
+        self.camera_controller.set_capture_mode(mode)
 
     def initialize_gpio(self):
         cf = self.config
@@ -127,10 +121,10 @@ class SystemController:
         self.set_delay(self.config.LED_TIME)
 
     def set_cam_triggered(self):
-        self.vidcap.control_set("exposure_auto_priority", 1)
+        self.vidcap.set_control("exposure_auto_priority", 1)
 
     def set_cam_freerunning(self):
-        self.vidcap.control_set("exposure_auto_priority", 0)
+        self.vidcap.set_control("exposure_auto_priority", 0)
 
     def sweep(self):
         self.config.LED_TIME += self.dt

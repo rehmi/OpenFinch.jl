@@ -7,7 +7,7 @@ from .ImageCapture import ImageCapture
 from ._v4l2 import V4L2CapturedImage, V4L2CameraController
 from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
 from .system_controller import SystemController
-from .camera_control_interface import CameraControllerInterface
+from .abstract_camera import AbstractCameraController
 from .wavegen import WaveGen
 
 
@@ -30,6 +30,6 @@ __all__ = [
 	'Picamera2CapturedImage',
  	'Picamera2Controller',
 	'SystemController',
-    'CameraControllerInterface',
+    'AbstractCameraController',
 	'OV2311Defaults'
 ]

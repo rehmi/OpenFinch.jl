@@ -13,7 +13,7 @@ import subprocess
 import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
-from .camera_control_interface import CameraControllerInterface
+from .abstract_camera import AbstractCameraController
 
 from .IMX296 import IMX296Defaults
 
@@ -40,7 +40,7 @@ class Picamera2CapturedImage:
     def to_bytes(self):
         return self.frame.getbuffer()
 
-class Picamera2Controller(CameraControllerInterface):
+class Picamera2Controller(AbstractCameraController):
     def __init__(self, device_id=0, controls={}):
         self.picam2 = Picamera2()
         self.controls = controls
@@ -49,7 +49,7 @@ class Picamera2Controller(CameraControllerInterface):
         self.preview_config = self.picam2.create_preview_configuration()
         self.video_config = self.picam2.create_video_configuration()
         self.picam2.start()
-        self.set_preview_mode()
+        self.set_capture_mode("preview")
         # picamera2 likes to log a lot of things
         logger = logging.getLogger('picamera2.request')
         logger.setLevel(logging.WARNING)
@@ -75,8 +75,11 @@ class Picamera2Controller(CameraControllerInterface):
                 logging.error(f"Error capturing frame: {e}")
 
     def _stop_reader(self):
-        self.running = False
-        self.thread.join()
+        try:
+            self.running = False
+            self.thread.join()
+        except Exception as e:
+            logging.exception("Picamera2Controller._stop_reader()")
 
     def capture_frame(self, blocking=True):
         if not blocking and self.frame_queue.empty():
@@ -116,12 +119,15 @@ class Picamera2Controller(CameraControllerInterface):
             logging.exception(f"Control '{control_name}'")
         finally:
             return False
-        
-    def set_still_mode(self):
-        self.picam2.switch_mode(self.still_config)
 
-    def set_preview_mode(self):
-        self.picam2.switch_mode(self.preview_config)
+    def get_controls(self):
+        return self.picam2.camera_ctrl_info
 
-    def set_video_mode(self):
-        self.picam2.switch_mode(self.video_config)
+    def set_capture_mode(self, mode):
+        if mode == 'still':
+            self.picam2.switch_mode(self.still_config)
+        elif mode == 'preview':
+            self.picam2.switch_mode(self.preview_config)
+        elif mode == 'video':
+            self.picam2.switch_mode(self.video_config)
+

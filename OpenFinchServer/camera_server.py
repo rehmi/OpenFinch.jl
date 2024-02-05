@@ -10,7 +10,7 @@ import os
 
 from .Display import Display
 from .system_controller import SystemController
-from .camera_control_interface import CameraControllerInterface
+from .abstract_camera import AbstractCameraController
 from ._picamera2 import Picamera2Controller
 from ._v4l2 import V4L2CameraController
 
@@ -165,7 +165,7 @@ class CameraServer:
 
     async def handle_camera_control(self, control_name, control_data):
         value = int(control_data.get('value', 0))
-        control_method = getattr(self.cam.vidcap, f"control_set")
+        control_method = getattr(self.cam.vidcap, f"set_control")
         control_method(control_name, value)
     
     async def handle_config_control(self, control_name, control_data):
@@ -227,12 +227,7 @@ class CameraServer:
 
     async def handle_capture_mode(self, capture_mode):
         mode = capture_mode.get('value', 'preview')
-        if mode == 'still':
-            self.cam.set_still_mode()
-        elif mode == 'preview':
-            self.cam.set_preview_mode()
-        elif mode == 'video':
-            self.cam.set_video_mode()
+        self.cam.set_capture_mode(mode)
         logging.info(f"Camera mode set to {mode}")
 
     async def handle_http(self, request):
