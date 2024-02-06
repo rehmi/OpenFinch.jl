@@ -7,7 +7,7 @@ import requests
 import time
 
 class Display:
-    def __init__(self, window_name='image', monitor_index=0):
+    def __init__(self, window_name='SLM image', monitor_index=0):
         # if 'DISPLAY' not in os.environ:
         # 	os.environ['DISPLAY'] = ':0'
 
@@ -90,7 +90,6 @@ class Display:
         else:
             raise ValueError("Invalid mode. Choose either 'fullscreen' or 'normal'.")
 
-    
     def switch_to_fullscreen(self):
         cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         self.update()

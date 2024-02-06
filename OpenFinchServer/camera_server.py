@@ -7,6 +7,7 @@ import numpy as np
 from io import BytesIO
 from aiohttp import web
 import os
+import requests
 
 from .display import Display
 from .system_controller import SystemController
@@ -72,10 +73,23 @@ class CameraServer:
 
     def update_display(self, img):
         img_array = np.array(img)
-        self.display.set_image(img_array)
-        self.display.display_image()
+        self.display.display_image(img_array)
         self.display.update()
 
+    async def handle_display_full_screen(self, image_url):
+        # You would have logic here to load the image from the given URL
+        # and then call the Display class method to show it full screen.
+        # Example (you might need to tailor this to your Display class methods):
+        try:
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_bytes = response.content
+            img = Image.open(BytesIO(image_bytes))
+            self.display.switch_to_fullscreen()
+            self.display.move_to_monitor(1)
+            self.update_display(img)
+        except requests.exceptions.HTTPError as err:
+            logging.exception(f"Error retrieving image: {err}")
 
     async def on_startup(self, app):
         app['task'] = asyncio.create_task(self.periodic_task())
@@ -194,6 +208,10 @@ class CameraServer:
                 if 'image_request' in data:
                     await self.handle_image_request(data, ws)
 
+                # Check for the slm_image_url command
+                if 'slm_image_url' in data:
+                    await self.handle_display_full_screen(data['slm_image_url'])
+                    
                 if data.get('SLM_image', '') == 'next':
                     image_blob = await ws.receive_bytes()
                     # logging.info(f"SLM_image received {len(image_blob)} bytes")
@@ -212,7 +230,7 @@ class CameraServer:
         # await self.send_captured_image(ws)
         logging.info(f"CameraServer.handle_image_request() was called")
         return
-
+    
     async def handle_sweep_enable(self, sweep_enable):
         self.sweep_enable = sweep_enable.get('value', False)
 

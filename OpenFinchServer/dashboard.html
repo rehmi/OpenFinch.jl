@@ -281,6 +281,12 @@
 		</div>
 	</div>	
 
+	<div id="fullscreen-display-section">
+		<label for="image_url">Enter Image URL:</label>
+		<input type="text" id="image_url" name="image_url" placeholder="http://example.com/image.jpg">
+		<button id="fullscreen_submit_btn">Display Full Screen</button>
+	</div>
+
 	<!-- This control is redundant wrt the camera mode control -->
 	<!-- <div>
 		<label for="exposure_auto_priority">Exposure Auto Priority:</label>
@@ -449,6 +455,24 @@
 		            }
 		        }));
 		    }
+		});
+
+		document.getElementById('fullscreen_submit_btn').addEventListener('click', function () {
+			// Get the image URL from the input
+			var imageUrl = document.getElementById('image_url').value;
+
+			// Verify WebSocket connection is open
+			if (ws.readyState == WebSocket.OPEN) {
+				// Send the image URL to the server via WebSocket message
+				ws.send(JSON.stringify({
+					'slm_image_url': imageUrl
+				}));
+
+				// Optional: Clear the input field after submission
+				// document.getElementById('image_url').value = '';
+			} else {
+				console.error('WebSocket connection is not open.');
+			}
 		});
 	</script>
 </body>
