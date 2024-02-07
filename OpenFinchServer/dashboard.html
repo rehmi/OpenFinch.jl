@@ -282,8 +282,13 @@
 	</div>	
 
 	<div>
-		<input type="checkbox" id="streamToggle" name="streamToggle" checked>
-		<label for="streamToggle">Stream Frames</label>
+		<input type="checkbox" id="stream_frames" name="stream_frames" checked>
+		<label for="stream_frames">Stream Frames</label>
+	</div>
+
+	<div>
+		<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" unchecked>
+		<label for="use_base64_encoding">Use base64 encoding</label>
 	</div>
 
 	<div id="fullscreen-display-section">
@@ -343,8 +348,15 @@
 				var data = JSON.parse(event.data);
 
 				// Handle image response
-				if (data.image_response && data.image_response.image === 'next') {
-					nextIsImage = true;
+				if (data.image_response) {
+					if (data.image_response.image === 'next') {
+						nextIsImage = true;
+					} else if (data.image_response.image === 'here') {
+						var imgElement = document.getElementById('image');
+						var base64Image = data.image_response.base64_image;
+						imgElement.src = 'data:image/jpeg;base64,' + base64Image;
+						nextIsImage = false;
+					}
 				} else {
 					// Handle updates for each control element
 					Object.keys(data).forEach(function (key) {
@@ -401,11 +413,15 @@
 			}
 		});
 
-		document.getElementById('streamToggle').addEventListener('change', function () {
+		document.getElementById('stream_frames').addEventListener('change', function () {
 			// Send the preference to the server using the websocket connection
-			ws.send(JSON.stringify({ 'frame_stream_preference': { 'value': this.checked } }));
+			ws.send(JSON.stringify({ 'stream_frames': { 'value': this.checked } }));
 		});
 
+		document.getElementById('use_base64_encoding').addEventListener('change', function () {
+			// Send the preference to the server using the websocket connection
+			ws.send(JSON.stringify({ 'use_base64_encoding': { 'value': this.checked } }));
+		});
 
 		Array.from(document.querySelectorAll('input[type=range]')).forEach(function (slider) {
 			slider.addEventListener('input', function () {

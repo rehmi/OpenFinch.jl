@@ -10,6 +10,7 @@ import os
 import requests
 from collections import defaultdict
 from asyncio import Queue
+import base64
 
 from .display import Display
 from .system_controller import SystemController
@@ -26,12 +27,16 @@ class CameraServer:
         self.active_connections = {}
         self.message_queues = defaultdict(Queue)
         self.sweep_enable = False
+        self.use_base64_encoding = False
         self.monitor_index = 1
         self.jpeg_quality = 75
 
         self.handlers = {
             'sweep_enable':
                 lambda data: self.handle_sweep_enable(data),
+            # XXX need to rethink this, or at least also pass ws as well; maybe use *args instead of data?
+            # 'stream_frames':
+                # lambda data: self.handle_stream_frames(ws, data),
             'capture_mode': lambda data: self.handle_capture_mode(data),
             'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
             'capture_mode': lambda data: self.handle_capture_mode(data),
@@ -59,6 +64,57 @@ class CameraServer:
         except Exception as e:
             logging.exception("CameraServer trying to initialize_display")
             pass
+
+    async def handle_ws(self, request):
+        ws = web.WebSocketResponse()
+        # self.active_connections.add(ws)
+        await ws.prepare(request)
+        # Initialize preferences with stream_frames set to True
+        self.active_connections[ws] = {'stream_frames': True}
+        logging.info(f"WebSocket connection established: {ws}")
+
+        # Start the active_connection_wrapper task for this connection
+        asyncio.create_task(self.active_connection_wrapper(ws))
+        
+        # start a handler loop that persists as long as the websocket
+        async for msg in ws:
+            if msg.type == web.WSMsgType.TEXT:
+                data = json.loads(msg.data)
+                logging.info(f"Received message: {data}")  # Log the received message
+                try:
+                    for key, handler in self.handlers.items():
+                        if key in data:
+                            await handler(data[key])
+
+                    if 'stream_frames' in data:
+                        await self.handle_stream_frames(ws, data['stream_frames'])
+                        
+                    if 'use_base64_encoding' in data:
+                        await self.handle_use_base64_encoding(ws, data['use_base64_encoding'])
+
+                    if 'image_request' in data:
+                        await self.handle_image_request(data, ws)
+
+                    # Check for the slm_image_url command
+                    if 'slm_image_url' in data:
+                        await self.handle_display_full_screen(data['slm_image_url'])
+                        
+                    if data.get('SLM_image', '') == 'next':
+                        image_blob = await ws.receive_bytes()
+                        # logging.info(f"SLM_image received {len(image_blob)} bytes")
+                        img = Image.open(BytesIO(image_blob))
+                        # logging.info(f"img has type {type(img)} and size {img.size}")
+                        self.display.move_to_monitor(self.monitor_index)
+                        self.update_display(img)
+                except Exception as e:
+                    logging.exception("CameraServer.handle_ws")
+        
+        # the websocket has closed or an error occurred.
+        logging.info(f"WebSocket connection closed: {ws}")
+        # self.active_connections.remove(ws)
+        if ws in self.active_connections:
+            del self.active_connections[ws]
+
 
     def initialize_display(self):
         # Initialize display and script/wave-related components
@@ -165,11 +221,17 @@ class CameraServer:
 
             img_bin = frame.to_bytes()
 
-            # Loop through each connection and check if send_frames is True
-        for ws, prefs in self.active_connections.items():
-            if prefs.get('send_frames', True):
-                # Create a task to execute the active_connection_wrapper asynchronously
-                await self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
+            # Loop through each connection and check if stream_frames is True
+            for ws, prefs in self.active_connections.items():
+                if prefs.get('stream_frames', True):
+                    if prefs.get('use_base64_encoding', False):
+                        # Convert the image to base64
+                        img_base64 = base64.b64encode(img_bin).decode('utf-8')
+                        # Send the base64 encoded image
+                        await self.send_str(ws, json.dumps({'image_response': {'image': 'here', 'base64_image': img_base64}}))
+                    else:
+                        # Send the 'next' message followed by the image blob
+                        await self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
 
     async def update_led_time(self, new_value):
         await self.broadcast_to_active_connections(self.send_str, json.dumps({'LED_TIME': {'value': new_value}}))
@@ -190,8 +252,11 @@ class CameraServer:
         except Exception as e:
             logging.exception("Exception in send_fps_update")
 
-    async def handle_frame_stream_preference(self, ws, preference_data):
-        self.active_connections[ws]['send_frames'] = preference_data.get('value', True)
+    async def handle_stream_frames(self, ws, preference_data):
+        self.active_connections[ws]['stream_frames'] = preference_data.get('value', True)
+
+    async def handle_use_base64_encoding(self, ws, preference_data):
+        self.active_connections[ws]['use_base64_encoding'] = preference_data.get('value', True)
 
     async def handle_camera_control(self, control_name, control_data):
         value = int(control_data.get('value', 0))
@@ -203,51 +268,6 @@ class CameraServer:
         if control_name in ['LED_TIME', 'LED_WIDTH', 'WAVE_DURATION']:
             setattr(self.cam.config, control_name, value)
             self.cam.update_wave()
-
-    async def handle_ws(self, request):
-        ws = web.WebSocketResponse()
-        # self.active_connections.add(ws)
-        await ws.prepare(request)
-        # Initialize preferences with send_frames set to True
-        self.active_connections[ws] = {'send_frames': True}
-        logging.info(f"WebSocket connection established: {ws}")
-
-        # Start the active_connection_wrapper task for this connection
-        asyncio.create_task(self.active_connection_wrapper(ws))
-        
-        # start a handler loop that persists as long as the websocket
-        async for msg in ws:
-            if msg.type == web.WSMsgType.TEXT:
-                data = json.loads(msg.data)
-                logging.info(f"Received message: {data}")  # Log the received message
-    
-                for key, handler in self.handlers.items():
-                    if key in data:
-                        await handler(data[key])
-
-                if 'frame_stream_preference' in data:
-                    await self.handle_frame_stream_preference(ws, data['frame_stream_preference'])
-
-                if 'image_request' in data:
-                    await self.handle_image_request(data, ws)
-
-                # Check for the slm_image_url command
-                if 'slm_image_url' in data:
-                    await self.handle_display_full_screen(data['slm_image_url'])
-                    
-                if data.get('SLM_image', '') == 'next':
-                    image_blob = await ws.receive_bytes()
-                    # logging.info(f"SLM_image received {len(image_blob)} bytes")
-                    img = Image.open(BytesIO(image_blob))
-                    # logging.info(f"img has type {type(img)} and size {img.size}")
-                    self.display.move_to_monitor(self.monitor_index)
-                    self.update_display(img)
-        
-        # the websocket has closed or an error occurred.
-        logging.info(f"WebSocket connection closed: {ws}")
-        # self.active_connections.remove(ws)
-        if ws in self.active_connections:
-            del self.active_connections[ws]
 
     async def handle_image_request(self, image_request, ws):
         # XXX this used to work but now that send_captured_image()
