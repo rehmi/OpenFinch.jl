@@ -8,21 +8,23 @@ from io import BytesIO
 from aiohttp import web
 import os
 import requests
+from collections import defaultdict
+from asyncio import Queue
 
 from .display import Display
 from .system_controller import SystemController
 from .abstract_camera import AbstractCameraController
 from ._picamera2 import Picamera2Controller
 from ._v4l2 import V4L2CameraController
+from .controls import picamera2_controls, IntegerControl, MenuControl
 
 class CameraServer:
     def __init__(self):
-        self.brightness, self.contrast, self.gamma = (0.5, 0.5, 1.0)
-        # self.img_height, self.img_width = 1200, 1600
         self.pcam = Picamera2Controller(device_id=0, controls={})
         self.cam = SystemController(camera_controller=self.pcam)
         self.cam.set_cam_triggered()
-        self.active_connections = set()
+        self.active_connections = {}
+        self.message_queues = defaultdict(Queue)
         self.sweep_enable = False
         self.monitor_index = 1
         self.jpeg_quality = 75
@@ -67,7 +69,7 @@ class CameraServer:
         self.display.update()
         self.display.move_to_monitor(0)
         self.display.update()
-        self.display.hide_window()
+        # self.display.hide_window()
         self.display.update()
         # XXX end hack
 
@@ -92,6 +94,7 @@ class CameraServer:
             logging.exception(f"Error retrieving image: {err}")
 
     async def on_startup(self, app):
+        app.router.add_get('/controls', self.handle_controls_endpoint)
         app['task'] = asyncio.create_task(self.periodic_task())
 
     async def periodic_task(self):
@@ -120,28 +123,33 @@ class CameraServer:
         return encodedImage.read()
 
     async def send_str_and_bytes(self, ws, str_data, bytes_data):
-        await ws.send_str(str_data)
-        await ws.send_bytes(bytes_data)
+        await self.message_queues[ws].put((str_data, bytes_data))
 
     async def send_str(self, ws, str_data):
-        await ws.send_str(str_data)
+        await self.message_queues[ws].put((str_data,))
 
-    async def active_connection_wrapper(self, ws, func, *args):
+    async def active_connection_wrapper(self, ws):
         try:
-            return await func(ws, *args)
+            while True:
+                messages = await self.message_queues[ws].get()
+                for message in messages:
+                    if isinstance(message, str):
+                        await ws.send_str(message)
+                    else:
+                        await ws.send_bytes(message)
         except Exception as e:
             logging.info(f"active_connection_wrapper: error occurred on WebSocket {ws}: {e}")
             try:
-                self.active_connections.remove(ws)
+                if ws in self.active_connections:
+                    del self.active_connections[ws]
+                del self.message_queues[ws]
             except KeyError:
                 pass
 
     async def broadcast_to_active_connections(self, func, *args):	
         tasks = [
-            self.active_connection_wrapper(ws, func, *args)
-            for ws in list(self.active_connections) # Create a copy of the set to avoid modifying it while iterating
+            func(ws, *args) for ws in list(self.active_connections) # Create a copy of the set to avoid modifying it while iterating
         ]
-
         await asyncio.gather(*tasks)
 
     async def send_captured_image(self):
@@ -156,7 +164,12 @@ class CameraServer:
             # XXX end section to be factored out
 
             img_bin = frame.to_bytes()
-            await self.broadcast_to_active_connections(self.send_str_and_bytes, json.dumps({'image_response': {'image': 'next'}}), img_bin)
+
+            # Loop through each connection and check if send_frames is True
+        for ws, prefs in self.active_connections.items():
+            if prefs.get('send_frames', True):
+                # Create a task to execute the active_connection_wrapper asynchronously
+                await self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
 
     async def update_led_time(self, new_value):
         await self.broadcast_to_active_connections(self.send_str, json.dumps({'LED_TIME': {'value': new_value}}))
@@ -177,6 +190,9 @@ class CameraServer:
         except Exception as e:
             logging.exception("Exception in send_fps_update")
 
+    async def handle_frame_stream_preference(self, ws, preference_data):
+        self.active_connections[ws]['send_frames'] = preference_data.get('value', True)
+
     async def handle_camera_control(self, control_name, control_data):
         value = int(control_data.get('value', 0))
         control_method = getattr(self.cam.vidcap, f"set_control")
@@ -190,20 +206,27 @@ class CameraServer:
 
     async def handle_ws(self, request):
         ws = web.WebSocketResponse()
-        self.active_connections.add(ws)
+        # self.active_connections.add(ws)
         await ws.prepare(request)
+        # Initialize preferences with send_frames set to True
+        self.active_connections[ws] = {'send_frames': True}
         logging.info(f"WebSocket connection established: {ws}")
 
+        # Start the active_connection_wrapper task for this connection
+        asyncio.create_task(self.active_connection_wrapper(ws))
+        
         # start a handler loop that persists as long as the websocket
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
                 logging.info(f"Received message: {data}")  # Log the received message
-
     
                 for key, handler in self.handlers.items():
                     if key in data:
                         await handler(data[key])
+
+                if 'frame_stream_preference' in data:
+                    await self.handle_frame_stream_preference(ws, data['frame_stream_preference'])
 
                 if 'image_request' in data:
                     await self.handle_image_request(data, ws)
@@ -222,7 +245,9 @@ class CameraServer:
         
         # the websocket has closed or an error occurred.
         logging.info(f"WebSocket connection closed: {ws}")
-        self.active_connections.remove(ws)
+        # self.active_connections.remove(ws)
+        if ws in self.active_connections:
+            del self.active_connections[ws]
 
     async def handle_image_request(self, image_request, ws):
         # XXX this used to work but now that send_captured_image()
@@ -247,6 +272,26 @@ class CameraServer:
         mode = capture_mode.get('value', 'preview')
         self.cam.set_capture_mode(mode)
         logging.info(f"Camera mode set to {mode}")
+
+    def generate_control_descriptors(self, controls):
+        descriptors = []
+        for control in controls.values():
+            descriptor = {
+                'id': control.id,
+                'type': control.type,
+                'name': control.name,
+                'range': control.range,
+                'default': control.default,
+                'value': control.value,
+                'step': control.step if isinstance(control, IntegerControl) else None,
+                'options': control.options if isinstance(control, MenuControl) else None
+            }
+            descriptors.append(descriptor)
+        return descriptors
+
+    async def handle_controls_endpoint(self, request):
+        control_descriptors = self.generate_control_descriptors(picamera2_controls)
+        return web.json_response(control_descriptors)
 
     async def handle_http(self, request):
         script_dir = os.path.dirname(__file__)

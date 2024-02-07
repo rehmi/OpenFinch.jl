@@ -281,6 +281,11 @@
 		</div>
 	</div>	
 
+	<div>
+		<input type="checkbox" id="streamToggle" name="streamToggle" checked>
+		<label for="streamToggle">Stream Frames</label>
+	</div>
+
 	<div id="fullscreen-display-section">
 		<label for="image_url">Enter Image URL:</label>
 		<input type="text" id="image_url" name="image_url" placeholder="http://example.com/image.jpg">
@@ -396,6 +401,12 @@
 			}
 		});
 
+		document.getElementById('streamToggle').addEventListener('change', function () {
+			// Send the preference to the server using the websocket connection
+			ws.send(JSON.stringify({ 'frame_stream_preference': { 'value': this.checked } }));
+		});
+
+
 		Array.from(document.querySelectorAll('input[type=range]')).forEach(function (slider) {
 			slider.addEventListener('input', function () {
 				var sliderId = this.id;
@@ -474,6 +485,44 @@
 				console.error('WebSocket connection is not open.');
 			}
 		});
+
+		fetch('/controls')
+		.then(response => response.json())
+		.then(controls => {
+			controls.forEach(control => {
+				let controlElement;
+				switch (control.type) {
+					case 'IntegerControl':
+						controlElement = document.createElement('input');
+						controlElement.type = 'range';
+						controlElement.min = control.range[0];
+						controlElement.max = control.range[1];
+						controlElement.step = control.step;
+						controlElement.value = control.value;
+						break;
+					case 'BooleanControl':
+						controlElement = document.createElement('input');
+						controlElement.type = 'checkbox';
+						controlElement.checked = control.value;
+						break;
+					case 'MenuControl':
+						controlElement = document.createElement('select');
+						control.options.forEach(option => {
+							let optionElement = document.createElement('option');
+							optionElement.value = option;
+							optionElement.textContent = option;
+							controlElement.appendChild(optionElement);
+						});
+						controlElement.value = control.value;
+						break;
+					// ... handle other control types
+				}
+				controlElement.id = control.name;
+				controlElement.name = control.name;
+				// Append the controlElement to the appropriate container in the DOM
+			});
+		});
+
 	</script>
 </body>
 
