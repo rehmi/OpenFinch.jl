@@ -19,15 +19,24 @@ from ._picamera2 import Picamera2Controller
 from ._v4l2 import V4L2CameraController
 from .controls import picamera2_controls, IntegerControl, MenuControl
 
+class BoundedQueue(asyncio.Queue):
+    def __init__(self, maxsize):
+        super().__init__(maxsize)
+
+    async def put(self, item):
+        if self.full():
+            # Drop the oldest item from the queue
+            await self.get()
+        await super().put(item)
+
 class CameraServer:
     def __init__(self):
         self.pcam = Picamera2Controller(device_id=0, controls={})
         self.cam = SystemController(camera_controller=self.pcam)
         self.cam.set_cam_triggered()
         self.active_connections = {}
-        self.message_queues = defaultdict(Queue)
+        self.message_queues = defaultdict(lambda: BoundedQueue(3))
         self.sweep_enable = False
-        self.use_base64_encoding = False
         self.monitor_index = 1
         self.jpeg_quality = 75
 
@@ -115,6 +124,49 @@ class CameraServer:
         if ws in self.active_connections:
             del self.active_connections[ws]
 
+    async def send_str_and_bytes(self, ws, str_data, bytes_data):
+        await self.message_queues[ws].put((str_data, bytes_data))
+
+    async def send_str(self, ws, str_data):
+        await self.message_queues[ws].put((str_data,))
+
+    async def active_connection_wrapper(self, ws):
+        try:
+            while True:
+                messages = await self.message_queues[ws].get()
+                for message in messages:
+                    if isinstance(message, str):
+                        await ws.send_str(message)
+                    else:
+                        await ws.send_bytes(message)
+        except Exception as e:
+            logging.info(f"active_connection_wrapper: error occurred on WebSocket {ws}: {e}")
+            try:
+                if ws in self.active_connections:
+                    del self.active_connections[ws]
+                del self.message_queues[ws]
+            except KeyError:
+                pass
+
+    async def broadcast_to_active_connections(self, func, *args):	
+        tasks = [
+            func(ws, *args) for ws in list(self.active_connections) # Create a copy of the set to avoid modifying it while iterating
+        ]
+        await asyncio.gather(*tasks)
+
+    async def on_startup(self, app):
+        app.router.add_get('/controls', self.handle_controls_endpoint)
+        app['task'] = asyncio.create_task(self.periodic_task())
+
+    async def periodic_task(self):
+        while True:
+            try:
+                await self.send_captured_image()
+                await self.send_fps_update()
+                await asyncio.sleep(0.001)
+            except Exception as e:
+                logging.exception("Exception in periodic_task")
+                raise e
 
     def initialize_display(self):
         # Initialize display and script/wave-related components
@@ -149,20 +201,6 @@ class CameraServer:
         except requests.exceptions.HTTPError as err:
             logging.exception(f"Error retrieving image: {err}")
 
-    async def on_startup(self, app):
-        app.router.add_get('/controls', self.handle_controls_endpoint)
-        app['task'] = asyncio.create_task(self.periodic_task())
-
-    async def periodic_task(self):
-        while True:
-            try:
-                await self.send_captured_image()
-                await self.send_fps_update()
-                await asyncio.sleep(0.001)
-            except Exception as e:
-                logging.exception("Exception in periodic_task")
-                raise e
-
     def enhance_image(self, img, brightness, contrast, gamma):
         enhancer = ImageEnhance.Brightness(img)
         img = enhancer.enhance(brightness)
@@ -177,36 +215,6 @@ class CameraServer:
         img.save(encodedImage, 'JPEG', quality=quality)
         encodedImage.seek(0)
         return encodedImage.read()
-
-    async def send_str_and_bytes(self, ws, str_data, bytes_data):
-        await self.message_queues[ws].put((str_data, bytes_data))
-
-    async def send_str(self, ws, str_data):
-        await self.message_queues[ws].put((str_data,))
-
-    async def active_connection_wrapper(self, ws):
-        try:
-            while True:
-                messages = await self.message_queues[ws].get()
-                for message in messages:
-                    if isinstance(message, str):
-                        await ws.send_str(message)
-                    else:
-                        await ws.send_bytes(message)
-        except Exception as e:
-            logging.info(f"active_connection_wrapper: error occurred on WebSocket {ws}: {e}")
-            try:
-                if ws in self.active_connections:
-                    del self.active_connections[ws]
-                del self.message_queues[ws]
-            except KeyError:
-                pass
-
-    async def broadcast_to_active_connections(self, func, *args):	
-        tasks = [
-            func(ws, *args) for ws in list(self.active_connections) # Create a copy of the set to avoid modifying it while iterating
-        ]
-        await asyncio.gather(*tasks)
 
     async def send_captured_image(self):
         frame = self.cam.capture_frame()
