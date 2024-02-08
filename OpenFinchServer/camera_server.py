@@ -91,6 +91,13 @@ class CameraServer:
                 data = json.loads(msg.data)
                 logging.debug(f"Received message: {data}")  # Log the received message
                 try:
+                    if 'set_control' in data:
+                        for control_name, control_value in data['set_control'].items():
+                            if control_name in self.handlers:
+                                await self.handlers[control_name]({'value': control_value})
+                            else:
+                                await self.handle_camera_control(control_name, {'value': control_value})
+                    
                     for key, handler in self.handlers.items():
                         if key in data:
                             await handler(data[key])
