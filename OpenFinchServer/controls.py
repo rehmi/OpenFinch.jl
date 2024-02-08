@@ -30,6 +30,7 @@ import v4l2py
 import picamera2
 from picamera2 import libcamera
 from libcamera import ControlType
+import logging
 
 def convert_picamera_controls(camera_ctrl_info):
     controls = {}
@@ -66,8 +67,8 @@ dev_controls = dev.controls
 # Convert the v4l2py controls to our common format
 common_dev_controls = convert_v4l2py_controls(dev_controls)
 # Print the common controls
-for control in common_dev_controls.values():
-    print(f"v4l2py control: {control.__dict__}")
+# for control in common_dev_controls.values():
+    # logging.debug(f"v4l2py control: {control.__dict__}")
 dev.close()
 
 # Create a picamera2 device and get its controls
@@ -76,6 +77,6 @@ camera_ctrl_info = p.camera_ctrl_info
 # Convert the picamera2 controls to our common format
 picamera2_controls = convert_picamera_controls(camera_ctrl_info)
 # Print the common controls
-for control in picamera2_controls.values():
-    print(f"picamera2 control: {control.__class__.__name__}{control.__dict__}")
+# for control in picamera2_controls.values():
+    # logging.debug(f"picamera2 control: {control.__class__.__name__}{control.__dict__}")
 p.close()

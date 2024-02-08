@@ -55,6 +55,28 @@
 			flex-wrap: wrap; /* This allows the containers to wrap onto the next line on smaller screens */
 		}
 		
+		.control-wrapper {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			width:  100%;
+			margin-bottom:  10px; /* Space between controls */
+		}
+
+		.control-wrapper label {
+			flex:  1;
+			margin-right:  10px;
+		}
+
+		.control-wrapper input[type=range] {
+			flex:  2;
+			width:  100%;
+		}
+
+		.control-wrapper span {
+			flex:  1;
+			text-align: right;
+		}
 		/* Styles the container of slider elements to form a row with aligned items */
 		.slider-decorated {
 			display: flex;
@@ -505,23 +527,54 @@
 		fetch('/controls')
 		.then(response => response.json())
 		.then(controls => {
+			const controlsContainer = document.querySelector('.control-container');
+
 			controls.forEach(control => {
 				let controlElement;
+				let labelElement;
+				let valueElement;
+				let controlWrapper;
+
 				switch (control.type) {
 					case 'IntegerControl':
+					case 'FloatControl':
+					case 'Integer32':
+					case 'Integer64':
+					case 'Float':
+						controlWrapper = document.createElement('div');
+						controlWrapper.className = 'slider-decorated';
+						labelElement = document.createElement('label');
+						labelElement.textContent = control.name;
 						controlElement = document.createElement('input');
 						controlElement.type = 'range';
 						controlElement.min = control.range[0];
 						controlElement.max = control.range[1];
-						controlElement.step = control.step;
+						// controlElement.step = control.step;
 						controlElement.value = control.value;
+						// Create a new span for the value display
+						let valueDisplay = document.createElement('span');
+						valueDisplay.textContent = control.value;
+						// Append the value display to the controlWrapper
+						controlWrapper.appendChild(labelElement);
+						controlWrapper.appendChild(controlElement);
+						controlWrapper.appendChild(valueDisplay); // Add the value display here
 						break;
 					case 'BooleanControl':
+					case 'Bool':
+						controlWrapper = document.createElement('div');
+						controlWrapper.className = 'checkbox-decorated';
+						labelElement = document.createElement('label');
+						labelElement.textContent = control.name;
 						controlElement = document.createElement('input');
 						controlElement.type = 'checkbox';
 						controlElement.checked = control.value;
+						controlWrapper.appendChild(labelElement);
+						controlWrapper.appendChild(controlElement);
 						break;
 					case 'MenuControl':
+						controlWrapper = document.createElement('div');
+						labelElement = document.createElement('label');
+						labelElement.textContent = control.name;
 						controlElement = document.createElement('select');
 						control.options.forEach(option => {
 							let optionElement = document.createElement('option');
@@ -530,14 +583,47 @@
 							controlElement.appendChild(optionElement);
 						});
 						controlElement.value = control.value;
+						controlWrapper.appendChild(labelElement);
+						controlWrapper.appendChild(controlElement);
 						break;
 					// ... handle other control types
 				}
+
 				controlElement.id = control.name;
 				controlElement.name = control.name;
-				// Append the controlElement to the appropriate container in the DOM
+				controlWrapper.appendChild(controlElement);
+				controlsContainer.appendChild(controlWrapper);
 			});
+		})
+		.catch(error => {
+			console.error('Error fetching controls:', error);
 		});
+
+
+		// fetch('/controls')
+		// .then(response => response.json())
+		// .then(controls => {
+		// 	const controlsContainer = document.getElementById('controls-container'); // Ensure this ID matches your HTML
+
+		// 	controls.forEach(control => {
+		// 		const controlElement = document.createElement('div'); // Or another appropriate HTML element
+		// 		// Fill 'controlElement' with the proper HTML based on 'control' properties
+		// 		// For example:
+		// 		controlElement.innerHTML = `<label for="${control.name}">${control.name}</label>
+		// 					<input type="${determineInputType(control)}" id="${control.name}" />`;
+
+		// 		controlsContainer.appendChild(controlElement); // Append the newly created element to the container
+		// 	});
+		// })
+		
+		// function determineInputType(control) {
+		// 	// You can implement this function to decide which input type to use
+		// 	// based on the control type. This could be a simple mapper from
+		// 	// control.type to 'number', 'checkbox', 'range', etc.
+		// 	// This is just a placeholder function.
+		// 	return 'text';
+		// }
+
 
 	</script>
 </body>

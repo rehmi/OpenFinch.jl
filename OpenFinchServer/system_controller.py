@@ -70,23 +70,23 @@ class SystemController:
         try:
             self.display.close()
         except Exception as e:
-            # logging.info(f"CameraController shutting down display: {e}")
+            # logging.debug(f"CameraController shutting down display: {e}")
             pass
         try:
             self.vidcap.close()
         except Exception as e:
-            # logging.info(f"CameraController shutting down vidcap: {e}")
+            # logging.debug(f"CameraController shutting down vidcap: {e}")
             pass
         try:
             self.script.stop()
             self.script.delete()
         except Exception as e:
-            # logging.info(f"CameraController shutting down script: {e}")
+            # logging.debug(f"CameraController shutting down script: {e}")
             pass
         try:
             self.wave.delete()
         except Exception as e:
-            # logging.info(f"CameraController shutting down wave: {e}")
+            # logging.debug(f"CameraController shutting down wave: {e}")
             pass
 
     def capture_frame(self, timeout=0):

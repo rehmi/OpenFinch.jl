@@ -80,7 +80,7 @@ class CameraServer:
         await ws.prepare(request)
         # Initialize preferences with stream_frames set to True
         self.active_connections[ws] = {'stream_frames': True}
-        logging.info(f"WebSocket connection established: {ws}")
+        logging.debug(f"WebSocket connection established: {ws}")
 
         # Start the active_connection_wrapper task for this connection
         asyncio.create_task(self.active_connection_wrapper(ws))
@@ -89,7 +89,7 @@ class CameraServer:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
-                logging.info(f"Received message: {data}")  # Log the received message
+                logging.debug(f"Received message: {data}")  # Log the received message
                 try:
                     for key, handler in self.handlers.items():
                         if key in data:
@@ -110,16 +110,16 @@ class CameraServer:
                         
                     if data.get('SLM_image', '') == 'next':
                         image_blob = await ws.receive_bytes()
-                        # logging.info(f"SLM_image received {len(image_blob)} bytes")
+                        # logging.debug(f"SLM_image received {len(image_blob)} bytes")
                         img = Image.open(BytesIO(image_blob))
-                        # logging.info(f"img has type {type(img)} and size {img.size}")
+                        # logging.debug(f"img has type {type(img)} and size {img.size}")
                         self.display.move_to_monitor(self.monitor_index)
                         self.update_display(img)
                 except Exception as e:
                     logging.exception("CameraServer.handle_ws")
         
         # the websocket has closed or an error occurred.
-        logging.info(f"WebSocket connection closed: {ws}")
+        logging.debug(f"WebSocket connection closed: {ws}")
         # self.active_connections.remove(ws)
         if ws in self.active_connections:
             del self.active_connections[ws]
@@ -281,7 +281,7 @@ class CameraServer:
         # XXX this used to work but now that send_captured_image()
         # broadcasts to all connections we need to refactor it
         # await self.send_captured_image(ws)
-        logging.info(f"CameraServer.handle_image_request() was called")
+        logging.debug(f"CameraServer.handle_image_request() was called")
         return
     
     async def handle_sweep_enable(self, sweep_enable):
@@ -299,7 +299,7 @@ class CameraServer:
     async def handle_capture_mode(self, capture_mode):
         mode = capture_mode.get('value', 'preview')
         self.cam.set_capture_mode(mode)
-        logging.info(f"Camera mode set to {mode}")
+        logging.debug(f"Camera mode set to {mode}")
 
     def generate_control_descriptors(self, controls):
         descriptors = []

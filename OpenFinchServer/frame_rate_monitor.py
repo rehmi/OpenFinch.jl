@@ -23,7 +23,7 @@ class FrameRateMonitor:
             cur_fps = self.frame_count / (time.time() - self.start_time)
             fps = self.alpha*self.latest_fps + (1-self.alpha)*cur_fps
             if log:
-                logging.info(f"{self.label}: average FPS {fps:.2f}")
+                logging.debug(f"{self.label}: average FPS {fps:.2f}")
             self.latest_fps = fps
             self.reset()
 
@@ -46,7 +46,7 @@ class StatsMonitor():
             self._flush_data()
 
     def _log_summary(self):
-        logging.info(f"{self.label} fps mean={1/statistics.mean(self.data_points):.2f}  median={1/statistics.median(self.data_points):.2f}   n={len(self.data_points)}")
+        logging.debug(f"{self.label} fps mean={1/statistics.mean(self.data_points):.2f}  median={1/statistics.median(self.data_points):.2f}   n={len(self.data_points)}")
 
     def _flush_data(self):
         self.data_points = []
