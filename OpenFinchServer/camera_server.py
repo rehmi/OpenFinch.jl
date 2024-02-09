@@ -9,7 +9,6 @@ from aiohttp import web
 import os
 import requests
 from collections import defaultdict
-from asyncio import Queue
 import base64
 
 from .display import Display
@@ -17,17 +16,8 @@ from .system_controller import SystemController
 from .abstract_camera import AbstractCameraController
 from ._picamera2 import Picamera2Controller
 from ._v4l2 import V4L2CameraController
-from .controls import BooleanControl, IntegerControl, FloatControl, MenuControl
-
-class BoundedQueue(asyncio.Queue):
-    def __init__(self, maxsize):
-        super().__init__(maxsize)
-
-    async def put(self, item):
-        if self.full():
-            # Drop the oldest item from the queue
-            await self.get()
-        await super().put(item)
+from .utils import BoundedQueue
+from .utils import BooleanControl, IntegerControl, FloatControl, MenuControl
 
 class CameraServer:
     def __init__(self):
@@ -266,7 +256,8 @@ class CameraServer:
             # XXX end section to be factored out
 
             img_bin = frame.to_bytes()
-
+            metadata = frame.metadata
+            
             # Loop through each connection and check if stream_frames is True
             for ws, prefs in self.active_connections.items():
                 if prefs.get('stream_frames', True):
@@ -274,10 +265,10 @@ class CameraServer:
                         # Convert the image to base64
                         img_base64 = base64.b64encode(img_bin).decode('utf-8')
                         # Send the base64 encoded image
-                        await self.send_str(ws, json.dumps({'image_response': {'image': 'here', 'base64_image': img_base64}}))
+                        await self.send_str(ws, json.dumps({'image_response': {'image': 'here', 'metadata': metadata, 'base64_image': img_base64}}))
                     else:
                         # Send the 'next' message followed by the image blob
-                        await self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next'}}), img_bin)
+                        await self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next', 'metadata': metadata}}), img_bin)
 
     async def update_led_time(self, new_value):
         await self.broadcast_to_active_connections(self.send_str, json.dumps({'LED_TIME': {'value': new_value}}))

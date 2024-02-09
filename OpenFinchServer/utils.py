@@ -27,8 +27,6 @@ class FloatControl(Control):
         super().__init__(name, id, type, range, default, value)
 
 import v4l2py
-import picamera2
-from picamera2 import libcamera
 from libcamera import ControlType
 import logging
 
@@ -68,3 +66,16 @@ def convert_v4l2py_controls(dev_controls):
 # # for control in picamera2_controls.values():
 #     # logging.debug(f"picamera2 control: {control.__class__.__name__}{control.__dict__}")
 # p.close()
+
+import asyncio
+from asyncio import Queue
+
+class BoundedQueue(asyncio.Queue):
+    def __init__(self, maxsize):
+        super().__init__(maxsize)
+
+    async def put(self, item):
+        if self.full():
+            # Drop the oldest item from the queue
+            await self.get()
+        await super().put(item)

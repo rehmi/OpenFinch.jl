@@ -252,7 +252,7 @@
 
 		<div class="control-container">
 
-			<div class="slider-decorated">
+			<!-- <div class="slider-decorated">
 				<label for="exposure_absolute">Absolute exposure:</label>
 				<input type="range" id="exposure_absolute" name="exposure_absolute" min="1" max="5000" step="1" value="66">
 				<span id="exposure_absolute_value">66</span>
@@ -298,8 +298,9 @@
 				<label for="sharpness">Sharpness:</label>
 				<input type="range" id="sharpness" name="sharpness" min="0" max="6" step="1" value="3">
 				<span id="sharpness_value">6</span>
-			</div>
+			</div> -->
 
+			<div id="metadata" style="white-space: pre-wrap;"></div>
 		</div>
 	</div>	
 
@@ -379,6 +380,15 @@
 						var base64Image = data.image_response.base64_image;
 						imgElement.src = 'data:image/jpeg;base64,' + base64Image;
 						nextIsImage = false;
+					}
+					// Handle metadata response
+					// if (data.image_response.metadata) {
+					// 	document.getElementById('metadata').textContent = data.image_response.metadata;
+					// }
+					if (data.image_response.metadata) {
+						var metadata = data.image_response.metadata;
+						var prettyMetadata = JSON.stringify(metadata, null, 2); // Pretty-print the JSON object
+						document.getElementById('metadata').textContent = prettyMetadata;
 					}
 				} else if (data.update_controls) {
 					Object.keys(data.update_controls).forEach(function (key) {

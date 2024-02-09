@@ -14,7 +14,7 @@ import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
 from .abstract_camera import AbstractCameraController
-from .controls import IntegerControl, BooleanControl, FloatControl, MenuControl
+from .utils import BoundedQueue, IntegerControl, BooleanControl, FloatControl, MenuControl
 
 from .IMX296 import IMX296Defaults
 
@@ -192,10 +192,10 @@ class Picamera2Controller(AbstractCameraController):
         while self.running:
             try:
                 data = io.BytesIO()
-                self.picam2.capture_file(data, format='jpeg')
+                metadata = self.picam2.capture_file(data, format='jpeg')
                 self.reader_fps.update()
                 if not self.frame_queue.full():
-                    self.frame_queue.put(Picamera2CapturedImage(data))
+                    self.frame_queue.put(Picamera2CapturedImage(data, metadata))
             except Exception as e:
                 logging.error(f"Error capturing frame: {e}")
 
@@ -220,12 +220,6 @@ class Picamera2Controller(AbstractCameraController):
     def close(self):
         self._stop_reader()
         self.picam2.stop()
-
-    # def capture_frame(self, blocking=True):
-    #     data = io.BytesIO()
-    #     self.picam2.capture_file(data, format='jpeg')
-    #     self.reader_fps.update()
-    #     return Picamera2CapturedImage(data)
 
     def set_capture_mode(self, mode):
         if mode == 'still':
