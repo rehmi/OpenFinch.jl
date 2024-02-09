@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 from screeninfo import get_monitors
 import v4l2py
-from picamera2 import Picamera2, Preview, Metadata
-import libcamera
-from libcamera import controls
+import picamera2
+from picamera2 import Picamera2, Preview, Metadata, libcamera
+from libcamera import controls, ControlType
 import time
 import os
 import io
@@ -14,6 +14,7 @@ import threading
 import queue
 from .frame_rate_monitor import FrameRateMonitor
 from .abstract_camera import AbstractCameraController
+from .controls import IntegerControl, BooleanControl, FloatControl, MenuControl
 
 from .IMX296 import IMX296Defaults
 
@@ -126,8 +127,8 @@ class Picamera2Controller(AbstractCameraController):
     def get_control(self, control_name):
         try:
             backend_control_name = self.common_to_imx296.get(control_name, control_name)
-            logging.info(f"get_control('{control_name}' -> '{backend_control_name}'")
-            return self.picam2.controls[backend_control_name]
+            logging.info(f"get_control('{control_name}' -> '{backend_control_name}')")
+            return getattr(self.picam2.controls, backend_control_name)
         except Exception as e:
             logging.exception(f"Control '{control_name}'")
         finally:
@@ -164,6 +165,23 @@ class Picamera2Controller(AbstractCameraController):
 
     def get_controls(self):
         return self.picam2.camera_ctrl_info
+
+    def get_control_descriptors(self):
+        # Convert the picamera2 controls to our common format
+        return self.convert_picamera_controls(self.picam2.camera_ctrl_info)
+    
+    def convert_picamera_controls(self, camera_ctrl_info):
+        controls = {}
+        for control_name, control_info in camera_ctrl_info.items():
+            control_id, control_range = control_info
+            control_type = control_id.type.name
+            if control_type == 'Integer32' or control_type == 'Integer64':
+                controls[control_name] = IntegerControl(control_name, control_id.id, control_type, (control_range.min, control_range.max), None, None, None)
+            elif control_type == 'Float':
+                controls[control_name] = FloatControl(control_name, control_id.id, control_type, (control_range.min, control_range.max), None, None)
+            elif control_type == 'Bool':
+                controls[control_name] = BooleanControl(control_name, control_id.id, control_type, None, None)
+        return controls
 
     def _start_reader(self):
         self.running = True

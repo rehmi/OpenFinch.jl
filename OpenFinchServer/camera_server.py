@@ -17,7 +17,7 @@ from .system_controller import SystemController
 from .abstract_camera import AbstractCameraController
 from ._picamera2 import Picamera2Controller
 from ._v4l2 import V4L2CameraController
-from .controls import picamera2_controls, IntegerControl, MenuControl
+from .controls import BooleanControl, IntegerControl, FloatControl, MenuControl
 
 class BoundedQueue(asyncio.Queue):
     def __init__(self, maxsize):
@@ -31,9 +31,9 @@ class BoundedQueue(asyncio.Queue):
 
 class CameraServer:
     def __init__(self):
-        self.pcam = Picamera2Controller(device_id=0, controls={})
-        self.cam = SystemController(camera_controller=self.pcam)
-        self.cam.set_cam_triggered()
+        self.camctrl = Picamera2Controller(device_id=0, controls={})
+        self.sysctrl = SystemController(camera_controller=self.camctrl)
+        self.sysctrl.set_cam_triggered()
         self.active_connections = {}
         self.message_queues = defaultdict(lambda: BoundedQueue(3))
         self.sweep_enable = False
@@ -46,6 +46,7 @@ class CameraServer:
             # XXX need to rethink this, or at least also pass ws as well; maybe use *args instead of data?
             # 'stream_frames':
                 # lambda data: self.handle_stream_frames(ws, data),
+            'update_controls': lambda data: self.handle_update_controls(data),
             'capture_mode': lambda data: self.handle_capture_mode(data),
             'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
             'capture_mode': lambda data: self.handle_capture_mode(data),
@@ -74,6 +75,10 @@ class CameraServer:
             logging.exception("CameraServer trying to initialize_display")
             pass
 
+    def shutdown(self):
+        # self.camctrl.shutdown()
+        self.sysctrl.shutdown()
+
     async def handle_ws(self, request):
         ws = web.WebSocketResponse()
         # self.active_connections.add(ws)
@@ -89,7 +94,7 @@ class CameraServer:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
-                logging.debug(f"Received message: {data}")  # Log the received message
+                logging.info(f"Received message: {data}")  # Log the received message
                 try:
                     if 'set_control' in data:
                         for control_name, control_value in data['set_control'].items():
@@ -175,6 +180,32 @@ class CameraServer:
                 logging.exception("Exception in periodic_task")
                 raise e
 
+    async def handle_update_controls(self, data):
+        # Collect the current control values
+        control_values = {control.name: self.get_control(control.name) for control in self.camctrl.get_control_descriptors().values()}
+        # Send the control values to the client
+        await self.broadcast_to_active_connections(self.send_str, json.dumps({'update_controls': control_values}))
+
+    def generate_control_descriptors(self, controls):
+        descriptors = []
+        for control in controls.values():
+            descriptor = {
+                'id': control.id,
+                'type': control.type,
+                'name': control.name,
+                'range': control.range,
+                'default': control.default,
+                'value': control.value,
+                'step': control.step if isinstance(control, IntegerControl) else None,
+                'options': control.options if isinstance(control, MenuControl) else None
+            }
+            descriptors.append(descriptor)
+        return descriptors
+
+    async def handle_controls_endpoint(self, request):
+        control_descriptors = self.generate_control_descriptors(self.camctrl.get_control_descriptors())
+        return web.json_response(control_descriptors)
+
     def initialize_display(self):
         # Initialize display and script/wave-related components
         self.display = Display()
@@ -224,14 +255,14 @@ class CameraServer:
         return encodedImage.read()
 
     async def send_captured_image(self):
-        frame = self.cam.capture_frame()
+        frame = self.sysctrl.capture_frame()
         if frame is not None:
             # Perform a camera sweep and update LED timing if the sweep is enabled, then update the wave.
             # XXX This should be factored out of send_captured_image()
             if self.sweep_enable:
-                self.cam.sweep()
-                await self.update_led_time(self.cam.config.LED_TIME)
-            self.cam.update_wave()
+                self.sysctrl.sweep()
+                await self.update_led_time(self.sysctrl.config.LED_TIME)
+            self.sysctrl.update_wave()
             # XXX end section to be factored out
 
             img_bin = frame.to_bytes()
@@ -257,9 +288,9 @@ class CameraServer:
     async def send_fps_update(self):
         try:
             fps_data = {
-                'image_capture_reader_fps': self.cam.get_reader_fps(),
-                'image_capture_capture_fps': self.cam.get_capture_fps(),
-                'system_controller_fps': self.cam.get_controller_fps()
+                'image_capture_reader_fps': self.sysctrl.get_reader_fps(),
+                'image_capture_capture_fps': self.sysctrl.get_capture_fps(),
+                'system_controller_fps': self.sysctrl.get_controller_fps()
             }
             await self.broadcast_to_active_connections(
                 self.send_str, json.dumps({'fps_update': fps_data})
@@ -275,14 +306,21 @@ class CameraServer:
 
     async def handle_camera_control(self, control_name, control_data):
         value = int(control_data.get('value', 0))
-        control_method = getattr(self.cam.vidcap, f"set_control")
-        control_method(control_name, value)
+        return self.set_control(control_name, value)
+
+    def set_control(self, control_name, value):
+        control_method = getattr(self.sysctrl.vidcap, f"set_control")
+        return control_method(control_name, value)
+    
+    def get_control(self, control_name):
+        control_method = getattr(self.sysctrl.vidcap, f"get_control")
+        return control_method(control_name)
     
     async def handle_config_control(self, control_name, control_data):
         value = int(control_data.get('value', 0))
         if control_name in ['LED_TIME', 'LED_WIDTH', 'WAVE_DURATION']:
-            setattr(self.cam.config, control_name, value)
-            self.cam.update_wave()
+            setattr(self.sysctrl.config, control_name, value)
+            self.sysctrl.update_wave()
 
     async def handle_image_request(self, image_request, ws):
         # XXX this used to work but now that send_captured_image()
@@ -299,34 +337,14 @@ class CameraServer:
         
     async def handle_capture_mode(self, capture_mode):
         if capture_mode['value'] == 'freerunning':
-            self.cam.set_cam_freerunning()
+            self.sysctrl.set_cam_freerunning()
         else:
-            self.cam.set_cam_triggered()
+            self.sysctrl.set_cam_triggered()
 
     async def handle_capture_mode(self, capture_mode):
         mode = capture_mode.get('value', 'preview')
-        self.cam.set_capture_mode(mode)
+        self.sysctrl.set_capture_mode(mode)
         logging.debug(f"Camera mode set to {mode}")
-
-    def generate_control_descriptors(self, controls):
-        descriptors = []
-        for control in controls.values():
-            descriptor = {
-                'id': control.id,
-                'type': control.type,
-                'name': control.name,
-                'range': control.range,
-                'default': control.default,
-                'value': control.value,
-                'step': control.step if isinstance(control, IntegerControl) else None,
-                'options': control.options if isinstance(control, MenuControl) else None
-            }
-            descriptors.append(descriptor)
-        return descriptors
-
-    async def handle_controls_endpoint(self, request):
-        control_descriptors = self.generate_control_descriptors(picamera2_controls)
-        return web.json_response(control_descriptors)
 
     async def handle_http(self, request):
         script_dir = os.path.dirname(__file__)

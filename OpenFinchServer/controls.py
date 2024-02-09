@@ -32,18 +32,6 @@ from picamera2 import libcamera
 from libcamera import ControlType
 import logging
 
-def convert_picamera_controls(camera_ctrl_info):
-    controls = {}
-    for control_name, control_info in camera_ctrl_info.items():
-        control_id, control_range = control_info
-        control_type = control_id.type.name
-        if control_type == 'Integer32' or control_type == 'Integer64':
-            controls[control_name] = IntegerControl(control_name, control_id.id, control_type, (control_range.min, control_range.max), None, None, None)
-        elif control_type == 'Float':
-            controls[control_name] = FloatControl(control_name, control_id.id, control_type, (control_range.min, control_range.max), None, None)
-        elif control_type == 'Bool':
-            controls[control_name] = BooleanControl(control_name, control_id.id, control_type, None, None)
-    return controls
 
 def convert_v4l2py_controls(dev_controls):
     controls = {}
@@ -60,23 +48,23 @@ def convert_v4l2py_controls(dev_controls):
             controls[control_id] = FloatControl(control.name, control_id, control_type, (control.minimum, control.maximum), control.default, control.value)
     return controls
 
-# Create a v4l2py device and get its controls
-dev = v4l2py.Device("/dev/video1")
-dev.open()
-dev_controls = dev.controls
-# Convert the v4l2py controls to our common format
-common_dev_controls = convert_v4l2py_controls(dev_controls)
-# Print the common controls
-# for control in common_dev_controls.values():
-    # logging.debug(f"v4l2py control: {control.__dict__}")
-dev.close()
+# # Create a v4l2py device and get its controls
+# dev = v4l2py.Device("/dev/video1")
+# dev.open()
+# dev_controls = dev.controls
+# # Convert the v4l2py controls to our common format
+# v4l2py_controls = convert_v4l2py_controls(dev_controls)
+# # Print the common controls
+# # for control in common_dev_controls.values():
+#     # logging.debug(f"v4l2py control: {control.__dict__}")
+# dev.close()
 
-# Create a picamera2 device and get its controls
-p = picamera2.Picamera2()
-camera_ctrl_info = p.camera_ctrl_info
-# Convert the picamera2 controls to our common format
-picamera2_controls = convert_picamera_controls(camera_ctrl_info)
-# Print the common controls
-# for control in picamera2_controls.values():
-    # logging.debug(f"picamera2 control: {control.__class__.__name__}{control.__dict__}")
-p.close()
+# # Create a picamera2 device and get its controls
+# p = picamera2.Picamera2()
+# camera_ctrl_info = p.camera_ctrl_info
+# # Convert the picamera2 controls to our common format
+# picamera2_controls = convert_picamera_controls(camera_ctrl_info)
+# # Print the common controls
+# # for control in picamera2_controls.values():
+#     # logging.debug(f"picamera2 control: {control.__class__.__name__}{control.__dict__}")
+# p.close()

@@ -18,6 +18,6 @@ try:
 except KeyboardInterrupt:
     logging.info("Ctrl-C pressed. Bailing out")
 finally:
-    server.cam.shutdown()
+    server.shutdown()
     logging.info(f"ending {__name__}")
     pass

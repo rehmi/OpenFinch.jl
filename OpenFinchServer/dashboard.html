@@ -339,6 +339,7 @@
 		</div>
 	</div>
 
+	<button id="update_controls_btn">Update Controls</button>
 
 	<script>
 		// default values for host and port if they have not been previously defined
@@ -379,6 +380,10 @@
 						imgElement.src = 'data:image/jpeg;base64,' + base64Image;
 						nextIsImage = false;
 					}
+				} else if (data.update_controls) {
+					Object.keys(data.update_controls).forEach(function (key) {
+						updateElementValue(key, data.update_controls[key]);
+					});
 				} else {
 					// Handle updates for each control element
 					Object.keys(data).forEach(function (key) {
@@ -495,6 +500,12 @@
 		})
 		.catch(error => {
 			console.error('Error fetching controls:', error);
+		});
+
+		document.getElementById('update_controls_btn').addEventListener('click', function () {
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({ 'update_controls': {} }));
+			}
 		});
 
 		function updateElementValue(elementId, newValue) {
