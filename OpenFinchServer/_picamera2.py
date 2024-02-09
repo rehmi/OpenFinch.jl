@@ -173,14 +173,22 @@ class Picamera2Controller(AbstractCameraController):
     def convert_picamera_controls(self, camera_ctrl_info):
         controls = {}
         for control_name, control_info in camera_ctrl_info.items():
+            # Skip these controls
+            if control_name in ['FrameDurationLimits']:
+                continue
+            
             control_id, control_range = control_info
             control_type = control_id.type.name
             if control_type == 'Integer32' or control_type == 'Integer64':
-                controls[control_name] = IntegerControl(control_name, control_id.id, control_type, (control_range.min, control_range.max), None, None, None)
+                min_val, max_val = control_range.min, control_range.max
+                if control_name == 'ExposureTime':
+                    max_val =  70000  # Set the maximum value for ExposureValue
+                controls[control_name] = IntegerControl(control_name, control_id.id, control_type, (min_val, max_val), None, None, None)
             elif control_type == 'Float':
                 controls[control_name] = FloatControl(control_name, control_id.id, control_type, (control_range.min, control_range.max), None, None)
             elif control_type == 'Bool':
-                controls[control_name] = BooleanControl(control_name, control_id.id, control_type, None, None)
+                default_value = True if control_name in ['AwbEnable', 'AeEnable'] else None
+                controls[control_name] = BooleanControl(control_name, control_id.id, control_type, default_value, default_value)
         return controls
 
     def _start_reader(self):

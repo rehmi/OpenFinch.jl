@@ -377,7 +377,7 @@
 						nextIsImage = true;
 					} else if (data.image_response.image === 'here') {
 						var imgElement = document.getElementById('image');
-						var base64Image = data.image_response.base64_image;
+						var base64Image = data.image_response.image_base64;
 						imgElement.src = 'data:image/jpeg;base64,' + base64Image;
 						nextIsImage = false;
 					}

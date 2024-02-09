@@ -265,10 +265,18 @@ class CameraServer:
                         # Convert the image to base64
                         img_base64 = base64.b64encode(img_bin).decode('utf-8')
                         # Send the base64 encoded image
-                        await self.send_str(ws, json.dumps({'image_response': {'image': 'here', 'metadata': metadata, 'base64_image': img_base64}}))
+                        await self.send_str(ws, json.dumps({
+                            'image_response': {
+                                'image': 'here',
+                                'metadata': metadata,
+                                'image_base64': img_base64}}))
                     else:
                         # Send the 'next' message followed by the image blob
-                        await self.send_str_and_bytes(ws, json.dumps({'image_response': {'image': 'next', 'metadata': metadata}}), img_bin)
+                        await self.send_str_and_bytes(ws, json.dumps({
+                            'image_response': {
+                                'image': 'next',
+                                'metadata': metadata
+                            }}), img_bin)
 
     async def update_led_time(self, new_value):
         await self.broadcast_to_active_connections(self.send_str, json.dumps({'LED_TIME': {'value': new_value}}))
@@ -277,6 +285,10 @@ class CameraServer:
         await self.broadcast_to_active_connections(self.send_str, json.dumps({control_name: {'value': new_value}}))
 
     async def send_fps_update(self):
+        current_time = time.time()  # Get the current time
+        if hasattr(self, 'last_fps_update_time') and current_time - self.last_fps_update_time < 1:
+            # If less than 1 second has passed since the last update, do not send another update
+            return
         try:
             fps_data = {
                 'image_capture_reader_fps': self.sysctrl.get_reader_fps(),
@@ -286,6 +298,7 @@ class CameraServer:
             await self.broadcast_to_active_connections(
                 self.send_str, json.dumps({'fps_update': fps_data})
             )
+            self.last_fps_update_time = current_time  # Update the last FPS update time
         except Exception as e:
             logging.exception("Exception in send_fps_update")
 
