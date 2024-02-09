@@ -443,6 +443,7 @@
 						controlElement.type = 'range';
 						controlElement.min = control.range[0];
 						controlElement.max = control.range[1];
+						controlElement.step = control.step; // Set the step attribute based on control descriptor
 						controlElement.value = control.value;
 						valueElement = document.createElement('span');
 						valueElement.textContent = control.value;
@@ -451,6 +452,7 @@
 						controlWrapper.appendChild(controlElement);
 						controlWrapper.appendChild(valueElement);
 						break;
+
 					case 'BooleanControl':
 					case 'Bool':
 						controlWrapper = document.createElement('div');
@@ -467,6 +469,7 @@
 						controlWrapper.appendChild(controlElement);
 						controlWrapper.appendChild(valueElement);
 						break;
+
 					case 'MenuControl':
 						controlWrapper = document.createElement('div');
 						labelElement = document.createElement('label');

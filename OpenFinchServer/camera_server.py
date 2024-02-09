@@ -181,12 +181,13 @@ class CameraServer:
         for control in controls.values():
             descriptor = {
                 'id': control.id,
-                'type': control.type,
+                # 'type': control.type,
+                'type': control.__class__.__name__,
                 'name': control.name,
                 'range': control.range,
                 'default': control.default,
                 'value': control.value,
-                'step': control.step if isinstance(control, IntegerControl) else None,
+                'step': control.step if hasattr(control, 'step') else (0.1 if isinstance(control, FloatControl) else None),
                 'options': control.options if isinstance(control, MenuControl) else None
             }
             descriptors.append(descriptor)
@@ -309,7 +310,11 @@ class CameraServer:
         self.active_connections[ws]['use_base64_encoding'] = preference_data.get('value', True)
 
     async def handle_camera_control(self, control_name, control_data):
-        value = int(control_data.get('value', 0))
+        # Check if the control expects a floating-point value and parse accordingly
+        if control_name in ['Brightness', 'Contrast', 'Saturation', 'Gamma', 'Gain', 'Sharpness']:  # Add other controls as needed
+            value = float(control_data.get('value', 0.0))
+        else:
+            value = int(control_data.get('value', 0))
         return self.set_control(control_name, value)
 
     def set_control(self, control_name, value):
