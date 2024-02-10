@@ -510,6 +510,10 @@
 					}
 				});
 			});
+
+			// XXX this does not belong here
+			document.getElementById('colour_gain_red').addEventListener('input', updateColourGains);
+			document.getElementById('colour_gain_blue').addEventListener('input', updateColourGains);
 		})
 		.catch(error => {
 			console.error('Error fetching controls:', error);
@@ -577,6 +581,20 @@
 				}
 			});
 		});
+
+		function updateColourGains() {
+			var redGain = document.getElementById('colour_gain_red').value;
+			var blueGain = document.getElementById('colour_gain_blue').value;
+			ws.send(JSON.stringify({
+				'set_control': {
+					'ColourGains': [parseFloat(redGain), parseFloat(blueGain)]
+				}
+			}));
+		}
+
+		// document.getElementById('colour_gain_red').addEventListener('input', updateColourGains);
+		// document.getElementById('colour_gain_blue').addEventListener('input', updateColourGains);
+
 
 		// document.getElementById('power_line_frequency').addEventListener('change', function () {
 		// 	var frequency = this.value;

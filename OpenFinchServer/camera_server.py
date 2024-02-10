@@ -24,6 +24,12 @@ class CameraServer:
         self.camctrl = Picamera2Controller(device_id=0, controls={})
         self.sysctrl = SystemController(camera_controller=self.camctrl)
         self.sysctrl.set_cam_triggered()
+        self.control_descriptors = self.generate_control_descriptors(self.camctrl.get_control_descriptors())
+        
+        self.persistent_metadata = {
+            'frame_number': 0,
+        }
+
         self.active_connections = {}
         self.message_queues = defaultdict(lambda: BoundedQueue(3))
         self.sweep_enable = False
@@ -57,6 +63,7 @@ class CameraServer:
             'backlight_compensation': lambda data: self.handle_camera_control('backlight_compensation', data),
             'exposure_auto': lambda data: self.handle_camera_control('exposure_auto', data),
             'exposure_auto_priority': lambda data: self.handle_camera_control('exposure_auto_priority', data),
+            'ColourGain': lambda data: self.handle_colour_gain(data),
         }
 
         try:
@@ -68,6 +75,12 @@ class CameraServer:
     def shutdown(self):
         # self.camctrl.shutdown()
         self.sysctrl.shutdown()
+
+    async def set_control(self, control_name, control_value):
+        if control_name in self.handlers:
+            await self.handlers[control_name]({'value': control_value})
+        else:
+            await self.handle_camera_control(control_name, {'value': control_value})
 
     async def handle_ws(self, request):
         ws = web.WebSocketResponse()
@@ -88,10 +101,7 @@ class CameraServer:
                 try:
                     if 'set_control' in data:
                         for control_name, control_value in data['set_control'].items():
-                            if control_name in self.handlers:
-                                await self.handlers[control_name]({'value': control_value})
-                            else:
-                                await self.handle_camera_control(control_name, {'value': control_value})
+                            await self.set_control(control_name, control_value)
                     
                     for key, handler in self.handlers.items():
                         if key in data:
@@ -172,30 +182,43 @@ class CameraServer:
 
     async def handle_update_controls(self, data):
         # Collect the current control values
-        control_values = {control.name: self.get_control(control.name) for control in self.camctrl.get_control_descriptors().values()}
+        control_values = {control.name: self._get_control(control.name) for control in self.camctrl.get_control_descriptors().values()}
         # Send the control values to the client
         await self.broadcast_to_active_connections(self.send_str, json.dumps({'update_controls': control_values}))
 
     def generate_control_descriptors(self, controls):
         descriptors = []
         for control in controls.values():
-            descriptor = {
-                'id': control.id,
-                # 'type': control.type,
-                'type': control.__class__.__name__,
-                'name': control.name,
-                'range': control.range,
-                'default': control.default,
-                'value': control.value,
-                'step': control.step if hasattr(control, 'step') else (0.1 if isinstance(control, FloatControl) else None),
-                'options': control.options if isinstance(control, MenuControl) else None
-            }
-            descriptors.append(descriptor)
+            if control.name == 'ColourGains':
+                # Split ColourGains into two separate controls for red and blue gains
+                for color in ['red', 'blue']:
+                    descriptor = {
+                        'id': control.id,
+                        'type': control.__class__.__name__,
+                        'name': f'colour_gain_{color}',
+                        'range': control.range,
+                        'default': control.default,
+                        'value': control.value,
+                        'step': 0.1,  # Assuming a step value for the slider
+                    }
+                    descriptors.append(descriptor)
+            else:
+                descriptor = {
+                    'id': control.id,
+                    'type': control.__class__.__name__,
+                    'name': control.name,
+                    'range': control.range,
+                    'default': control.default,
+                    'value': control.value,
+                    'step': control.step if hasattr(control, 'step') else (0.1 if isinstance(control, FloatControl) else None),
+                    'options': control.options if isinstance(control, MenuControl) else None
+                }
+                descriptors.append(descriptor)
         return descriptors
 
     async def handle_controls_endpoint(self, request):
-        control_descriptors = self.generate_control_descriptors(self.camctrl.get_control_descriptors())
-        return web.json_response(control_descriptors)
+        # control_descriptors = self.generate_control_descriptors(self.camctrl.get_control_descriptors())
+        return web.json_response(self.control_descriptors)
 
     def initialize_display(self):
         # Initialize display and script/wave-related components
@@ -257,7 +280,14 @@ class CameraServer:
             # XXX end section to be factored out
 
             img_bin = frame.to_bytes()
-            metadata = frame.metadata
+            current_frame_metadata = frame.metadata
+
+            # Update the frame number and any other relevant fields
+            self.persistent_metadata['frame_number'] += 1
+
+            # Merge or update other fields from the current frame metadata into the persistent metadata
+            for key, value in current_frame_metadata.items():
+                self.persistent_metadata[key] = value
             
             # Loop through each connection and check if stream_frames is True
             for ws, prefs in self.active_connections.items():
@@ -269,14 +299,14 @@ class CameraServer:
                         await self.send_str(ws, json.dumps({
                             'image_response': {
                                 'image': 'here',
-                                'metadata': metadata,
+                                'metadata': self.persistent_metadata,
                                 'image_base64': img_base64}}))
                     else:
                         # Send the 'next' message followed by the image blob
                         await self.send_str_and_bytes(ws, json.dumps({
                             'image_response': {
                                 'image': 'next',
-                                'metadata': metadata
+                                'metadata': self.persistent_metadata
                             }}), img_bin)
 
     async def update_led_time(self, new_value):
@@ -310,18 +340,22 @@ class CameraServer:
         self.active_connections[ws]['use_base64_encoding'] = preference_data.get('value', True)
 
     async def handle_camera_control(self, control_name, control_data):
-        # Check if the control expects a floating-point value and parse accordingly
-        if control_name in ['Brightness', 'Contrast', 'Saturation', 'Gamma', 'Gain', 'Sharpness']:  # Add other controls as needed
+        # Look up the control descriptor by name
+        control_descriptor = next((cd for cd in self.control_descriptors if cd['name'] == control_name), None)
+        
+        # Determine the value type based on the control descriptor
+        if control_descriptor and control_descriptor['type'] in ['FloatControl', 'Float']:
             value = float(control_data.get('value', 0.0))
         else:
             value = int(control_data.get('value', 0))
-        return self.set_control(control_name, value)
+        
+        return self._set_control(control_name, value)
 
-    def set_control(self, control_name, value):
+    def _set_control(self, control_name, value):
         control_method = getattr(self.sysctrl.vidcap, f"set_control")
         return control_method(control_name, value)
     
-    def get_control(self, control_name):
+    def _get_control(self, control_name):
         control_method = getattr(self.sysctrl.vidcap, f"get_control")
         return control_method(control_name)
     
