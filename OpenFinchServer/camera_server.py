@@ -63,6 +63,8 @@ class CameraServer:
             'backlight_compensation': lambda data: self.handle_camera_control('backlight_compensation', data),
             'exposure_auto': lambda data: self.handle_camera_control('exposure_auto', data),
             'exposure_auto_priority': lambda data: self.handle_camera_control('exposure_auto_priority', data),
+            'colour_gain_red': lambda data: self.handle_dummy('colour_gain_red', data),
+            'colour_gain_blue': lambda data: self.handle_dummy('colour_gain_blue', data),
             'ColourGain': lambda data: self.handle_colour_gain(data),
         }
 
@@ -71,6 +73,9 @@ class CameraServer:
         except Exception as e:
             logging.exception("CameraServer trying to initialize_display")
             pass
+
+    async def handle_dummy(self, name, data):
+        logging.info(f"handle_dummy({name}, {data})")
 
     def shutdown(self):
         # self.camctrl.shutdown()
@@ -97,7 +102,7 @@ class CameraServer:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
-                logging.info(f"Received message: {data}")  # Log the received message
+                logging.debug(f"Received message: {data}")  # Log the received message
                 try:
                     if 'set_control' in data:
                         for control_name, control_value in data['set_control'].items():
@@ -152,7 +157,7 @@ class CameraServer:
                     else:
                         await ws.send_bytes(message)
         except Exception as e:
-            logging.info(f"active_connection_wrapper: error occurred on WebSocket {ws}: {e}")
+            logging.exception(f"active_connection_wrapper: error on WebSocket")
             try:
                 if ws in self.active_connections:
                     del self.active_connections[ws]
@@ -251,7 +256,7 @@ class CameraServer:
             self.display.move_to_monitor(1)
             self.update_display(img)
         except requests.exceptions.HTTPError as err:
-            logging.exception(f"Error retrieving image: {err}")
+            logging.exception(f"Error retrieving image")
 
     def enhance_image(self, img, brightness, contrast, gamma):
         enhancer = ImageEnhance.Brightness(img)
@@ -342,13 +347,8 @@ class CameraServer:
     async def handle_camera_control(self, control_name, control_data):
         # Look up the control descriptor by name
         control_descriptor = next((cd for cd in self.control_descriptors if cd['name'] == control_name), None)
-        
-        # Determine the value type based on the control descriptor
-        if control_descriptor and control_descriptor['type'] in ['FloatControl', 'Float']:
-            value = float(control_data.get('value', 0.0))
-        else:
-            value = int(control_data.get('value', 0))
-        
+        logging.debug(f"CameraServer.handle_camera_control({control_name}, {control_data})")
+        value = control_data.get('value', 0)
         return self._set_control(control_name, value)
 
     def _set_control(self, control_name, value):

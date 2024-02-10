@@ -114,10 +114,10 @@ class Picamera2Controller(AbstractCameraController):
         return backend_value / 1
 
     def set_control(self, control_name, value):
-        logging.info(f"Picamera2Controller.set_control({control_name}, {value})")
+        logging.debug(f"Picamera2Controller.set_control({control_name}, {value})")
         try:
             backend_control_name = self.common_to_imx296.get(control_name, control_name)
-            logging.info(f"set_control('{control_name}' -> '{backend_control_name}', {value})")
+            logging.debug(f"set_control('{control_name}' -> '{backend_control_name}', {value})")
             self.picam2.set_controls({backend_control_name: value})
         except Exception as e:
             logging.exception(f"Control '{control_name}'")
@@ -127,7 +127,7 @@ class Picamera2Controller(AbstractCameraController):
     def get_control(self, control_name):
         try:
             backend_control_name = self.common_to_imx296.get(control_name, control_name)
-            logging.info(f"get_control('{control_name}' -> '{backend_control_name}')")
+            logging.debug(f"get_control('{control_name}' -> '{backend_control_name}')")
             return getattr(self.picam2.controls, backend_control_name)
         except Exception as e:
             logging.exception(f"Control '{control_name}'")

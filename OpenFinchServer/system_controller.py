@@ -121,10 +121,14 @@ class SystemController:
         self.set_delay(self.config.LED_TIME)
 
     def set_cam_triggered(self):
-        self.vidcap.set_control("exposure_auto_priority", 1)
+        # XXX move this into the camera controller
+        # self.vidcap.set_control("exposure_auto_priority", 1)
+        pass
 
     def set_cam_freerunning(self):
-        self.vidcap.set_control("exposure_auto_priority", 0)
+        # XXX move this into the camera controller
+        # self.vidcap.set_control("exposure_auto_priority", 0)
+        pass
 
     def sweep(self):
         self.config.LED_TIME += self.dt
