@@ -28,9 +28,9 @@ class TriggerConfig:
     GRN_OUT: int = 27
     BLU_OUT: int = 23
     
-    RED_FACTOR: float = 1
-    GRN_FACTOR: float = 3
-    BLU_FACTOR: float = 1
+    RED_FACTOR: float = 2.0
+    GRN_FACTOR: float = 3.0
+    BLU_FACTOR: float = 0.5
     
     TRIG_IN: int = BLU_IN
     BLU_START: int = 0
@@ -176,9 +176,9 @@ class PiGPIOWave:
     def generate_wave(self):
         cf = self.config
         
-        RED_WIDTH = cf.RED_FACTOR * cf.LED_WIDTH
-        GRN_WIDTH = cf.GRN_FACTOR * cf.LED_WIDTH
-        BLU_WIDTH = cf.BLU_FACTOR * cf.LED_WIDTH
+        RED_WIDTH = int(cf.RED_FACTOR * cf.LED_WIDTH)
+        GRN_WIDTH = int(cf.GRN_FACTOR * cf.LED_WIDTH)
+        BLU_WIDTH = int(cf.BLU_FACTOR * cf.LED_WIDTH)
         
         RED_TIME = cf.LED_TIME + cf.RED_START
         GRN_TIME = cf.LED_TIME + cf.GRN_START
