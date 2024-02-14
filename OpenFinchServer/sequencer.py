@@ -28,9 +28,9 @@ class TriggerConfig:
     GRN_OUT: int = 27
     BLU_OUT: int = 23
     
-    RED_FACTOR: float = 2.0
-    GRN_FACTOR: float = 3.0
-    BLU_FACTOR: float = 0.5
+    RED_FACTOR: float = 1
+    GRN_FACTOR: float = 1
+    BLU_FACTOR: float = 1
     
     TRIG_IN: int = BLU_IN
     BLU_START: int = 0
@@ -40,15 +40,15 @@ class TriggerConfig:
     TRIG_OUT: int = 5
     STROBE_IN: int = 6
 
-    LED_IN: int = TRIG_IN
-    LED_OUT: int = RED_OUT
-    TRIG_OUT: int = TRIG_OUT
+    # LED_IN: int = TRIG_IN
+    # LED_OUT: int = RED_OUT
+    # TRIG_OUT: int = TRIG_OUT
     
     TRIG_TIME: int = 0
-    TRIG_WIDTH: int = 10
+    TRIG_WIDTH: int = 33333
     LED_TIME: int = 400
     LED_WIDTH: int = 4
-    WAVE_DURATION: int = 8000
+    WAVE_DURATION: int = 40000
 
 class PiGPIOScript:
     def __init__(self, pig, text=None, id=None):
@@ -192,8 +192,8 @@ class PiGPIOWave:
         # self.wavegen.change_bit(cf.LED_OUT, 0, 0)
 
         # Camera trigger puls
-        self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME)
-        self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME + cf.TRIG_WIDTH)
+        self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME)
+        self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH)
 
         # RED LED pulse
         self.wavegen.change_bit(cf.RED_OUT, 1, RED_TIME)
@@ -208,7 +208,7 @@ class PiGPIOWave:
         self.wavegen.change_bit(cf.BLU_OUT, 0, BLU_TIME + BLU_WIDTH)
 
         # Add a final event to pad to desired duration
-        self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.WAVE_DURATION)
+        self.wavegen.change_bit(cf.STROBE_IN, 1, cf.WAVE_DURATION)
         
         # Convert the wavegen changes to pigpio wave format
         wave = [
