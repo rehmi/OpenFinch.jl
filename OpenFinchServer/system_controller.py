@@ -15,11 +15,11 @@ class SystemController:
         self.camera_controller = camera_controller
         # Initialize the configuration first
         self.config = TriggerConfig()
-        self.config.TRIG_WIDTH = 10
-        self.config.LED_WIDTH = 4
-        self.config.WAVE_DURATION = 8000
-        self.config.LED_TIME = 400
-        self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
+        # self.config.TRIG_WIDTH = 10
+        # self.config.LED_WIDTH = 4
+        # self.config.WAVE_DURATION = 8000
+        # self.config.LED_TIME = 400
+        # self.config.LED_MASK = 1 << self.config.RED_OUT  # | 1<<GRN_OUT | 1<<BLU_OUT
 
         self.t_min = 0
         self.t_max = 2730
@@ -39,10 +39,10 @@ class SystemController:
     def initialize_gpio(self):
         cf = self.config
 
-        for pin in [cf.TRIG_OUT, cf.RED_OUT, cf.GRN_OUT, cf.BLU_OUT, cf.LED_OUT]:
+        for pin in [cf.TRIG_OUT, cf.RED_OUT, cf.GRN_OUT, cf.BLU_OUT]:
             self.pig.set_mode(pin, pigpio.OUTPUT)
 
-        for pin in [cf.TRIG_IN, cf.LED_IN, cf.RED_IN, cf.GRN_IN, cf.BLU_IN, cf.STROBE_IN]:
+        for pin in [cf.TRIG_IN, cf.RED_IN, cf.GRN_IN, cf.BLU_IN, cf.STROBE_IN]:
             self.pig.set_mode(pin, pigpio.INPUT)
 
     def initialize_trigger(self):
