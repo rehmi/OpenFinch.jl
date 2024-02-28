@@ -25,8 +25,8 @@ class TriggerConfig:
     BLU_IN: int = 25
 
     RED_OUT: int = 17
-    GRN_OUT: int = 27
-    BLU_OUT: int = 23
+    GRN_OUT: int = 23
+    BLU_OUT: int = 27
     
     RED_FACTOR: float = 1
     GRN_FACTOR: float = 1
