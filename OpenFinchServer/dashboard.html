@@ -55,6 +55,28 @@
 			flex-wrap: wrap; /* This allows the containers to wrap onto the next line on smaller screens */
 		}
 		
+		.control-wrapper {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			width:  100%;
+			margin-bottom:  10px; /* Space between controls */
+		}
+
+		.control-wrapper label {
+			flex:  1;
+			margin-right:  10px;
+		}
+
+		.control-wrapper input[type=range] {
+			flex:  2;
+			width:  100%;
+		}
+
+		.control-wrapper span {
+			flex:  1;
+			text-align: right;
+		}
 		/* Styles the container of slider elements to form a row with aligned items */
 		.slider-decorated {
 			display: flex;
@@ -76,7 +98,7 @@
 			width: 300px;
 			/* margin: 0; */
 			/* padding: 0; */
-			align-items: first;
+			align-items: left;
 		}
 
 		/* Defines the width, margin, and padding for the span that displays the slider's value */
@@ -90,31 +112,32 @@
 		/* Styles the container of checkbox elements to form a row with aligned items */
 		.checkbox-decorated {
 			display: flex;
-			/* justify-content: space-between; */
-			align-items: center;
+			justify-content: space-between;
+			/* align-items: center; */
 			width: 100%;
 		}
 
 		/* Styles the checkbox label */
 		.checkbox-decorated label {
-			width: 40%;
+			max-width: 50%;
 			margin: 0;
 			padding: 0;
 			text-align: right;
 		}
 
 		/* Style the checkbox to a proportion of its container */
-		.checkbox-decorated input[type=range] {
-			width: 10%;
-			margin: 0;
-			padding: 0;
+		.checkbox-decorated input[type=checkbox] {
+			/* width: 10%; */
+			/* margin: 0; */
+			/* padding: 0; */
+			align-items: right;
 		}
 
 		/* Style the span that displays the checkbox's value */
 		.checkbox-decorated span {
-			width: 50%;
-			margin: 0;
-			padding: 0;
+			/* width: 50%; */
+			/* margin: 0; */
+			/* padding: 0; */
 			text-align: left;
 		}
 
@@ -152,25 +175,32 @@
 	<h1>OpenFinch dashboard</h1>
 	<div class="controls-wrapper">
 		<div class="control-container">
+
+			<div>
+				<label for="capture_mode">Capture Mode:</label>
+				<select id="capture_mode" name="capture_mode">
+					<option value="preview">Preview</option>
+					<option value="video">Video</option>
+					<option value="still">Still</option>
+				</select>
+			</div>
+
 			<div class="checkbox-decorated">
 				<label for="cam_mode">Camera Mode:</label>
 				<input type="checkbox" id="cam_mode" name="cam_mode">
 				<span id="cam_mode_value">triggered</span>
 			</div>
+
+			<br>
 			
-			<div>
-				<label for="sweep">Sweep LED time:</label>
-				<input type="checkbox" id="sweep" name="sweep">
-			</div>
-			
-			<div>
+			<!-- <div>
 				<label for="power_line_frequency">Power Line Frequency:</label>
 				<select id="power_line_frequency" name="power_line_frequency">
 					<option value="0">Disabled</option>
 					<option value="1">50 Hz</option>
 					<option value="2">60 Hz</option>
 				</select>
-			</div>
+			</div> -->
 			
 			<div>
 				<label for="exposure_auto">Exposure Auto:</label>
@@ -189,22 +219,27 @@
 				</select>
 			</div>
 
+			<div>
+				<label for="sweep">Sweep LED time:</label>
+				<input type="checkbox" id="sweep" name="sweep">
+			</div>
+
 			<div class="slider-decorated">
 				<label for="LED_TIME">LED time:</label>
-				<input type="range" id="LED_TIME" name="LED_TIME" min="1000" max="9333" step="10" value="1000">
-				<span id="LED_TIME_value">1000</span>
+				<input type="range" id="LED_TIME" name="LED_TIME" min="0" max="8333" step="10" value="400">
+				<span id="LED_TIME_value">400</span>
 			</div>
 			
 			<div class="slider-decorated">
 				<label for="WAVE_DURATION">Wave duration:</label>
-				<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="70000" step="100" value="33400">
-				<span id="WAVE_DURATION_value">33400</span>
+				<input type="range" id="WAVE_DURATION" name="WAVE_DURATION" min="0" max="50000" step="100" value="8000">
+				<span id="WAVE_DURATION_value">8000</span>
 			</div>
 			
 			<div class="slider-decorated">
 				<label for="LED_WIDTH">LED Width:</label>
-				<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="100" step="1" value="20">
-				<span id="LED_WIDTH_value">20</span>
+				<input type="range" id="LED_WIDTH" name="LED_WIDTH" min="0" max="1500" step="1" value="4">
+				<span id="LED_WIDTH_value">4</span>
 			</div>
 
 			<div class="slider-decorated">
@@ -212,10 +247,12 @@
 				<input type="range" id="JPEG_QUALITY" name="JPEG_QUALITY" min="0" max="100" step="1" value="25">
 				<span id="JPEG_QUALITY_value">25</span>
 			</div>
+
 		</div>
 
 		<div class="control-container">
-			<div class="slider-decorated">
+
+			<!-- <div class="slider-decorated">
 				<label for="exposure_absolute">Absolute exposure:</label>
 				<input type="range" id="exposure_absolute" name="exposure_absolute" min="1" max="5000" step="1" value="66">
 				<span id="exposure_absolute_value">66</span>
@@ -261,10 +298,27 @@
 				<label for="sharpness">Sharpness:</label>
 				<input type="range" id="sharpness" name="sharpness" min="0" max="6" step="1" value="3">
 				<span id="sharpness_value">6</span>
-			</div>
+			</div> -->
 
+			<div id="metadata" style="white-space: pre-wrap;"></div>
 		</div>
 	</div>	
+
+	<div>
+		<input type="checkbox" id="stream_frames" name="stream_frames" checked>
+		<label for="stream_frames">Stream Frames</label>
+	</div>
+
+	<div>
+		<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" unchecked>
+		<label for="use_base64_encoding">Use base64 encoding</label>
+	</div>
+
+	<div id="fullscreen-display-section">
+		<label for="image_url">Enter Image URL:</label>
+		<input type="text" id="image_url" name="image_url" placeholder="http://example.com/image.jpg">
+		<button id="fullscreen_submit_btn">Display Full Screen</button>
+	</div>
 
 	<!-- This control is redundant wrt the camera mode control -->
 	<!-- <div>
@@ -286,6 +340,7 @@
 		</div>
 	</div>
 
+	<button id="update_controls_btn">Update Controls</button>
 
 	<script>
 		// default values for host and port if they have not been previously defined
@@ -317,8 +372,28 @@
 				var data = JSON.parse(event.data);
 
 				// Handle image response
-				if (data.image_response && data.image_response.image === 'next') {
-					nextIsImage = true;
+				if (data.image_response) {
+					if (data.image_response.image === 'next') {
+						nextIsImage = true;
+					} else if (data.image_response.image === 'here') {
+						var imgElement = document.getElementById('image');
+						var base64Image = data.image_response.image_base64;
+						imgElement.src = 'data:image/jpeg;base64,' + base64Image;
+						nextIsImage = false;
+					}
+					// Handle metadata response
+					// if (data.image_response.metadata) {
+					// 	document.getElementById('metadata').textContent = data.image_response.metadata;
+					// }
+					if (data.image_response.metadata) {
+						var metadata = data.image_response.metadata;
+						var prettyMetadata = JSON.stringify(metadata, null, 2); // Pretty-print the JSON object
+						document.getElementById('metadata').textContent = prettyMetadata;
+					}
+				} else if (data.update_controls) {
+					Object.keys(data.update_controls).forEach(function (key) {
+						updateElementValue(key, data.update_controls[key]);
+					});
 				} else {
 					// Handle updates for each control element
 					Object.keys(data).forEach(function (key) {
@@ -343,14 +418,121 @@
 			}
 		};
 
+		fetch('/controls')
+		.then(response => response.json())
+		.then(controls => {
+			const controlsContainer = document.querySelector('.control-container');
+
+			controls.forEach(control => {
+				let controlElement;
+				let labelElement;
+				let valueElement;
+				let controlWrapper;
+
+				switch (control.type) {
+					case 'IntegerControl':
+					case 'FloatControl':
+					case 'Integer32':
+					case 'Integer64':
+					case 'Float':
+						controlWrapper = document.createElement('div');
+						controlWrapper.className = 'slider-decorated';
+						labelElement = document.createElement('label');
+						labelElement.textContent = control.name;
+						controlElement = document.createElement('input');
+						controlElement.type = 'range';
+						controlElement.min = control.range[0];
+						controlElement.max = control.range[1];
+						controlElement.step = control.step; // Set the step attribute based on control descriptor
+						controlElement.value = control.value;
+						valueElement = document.createElement('span');
+						valueElement.textContent = control.value;
+						valueElement.id = control.name + '_value'; // Set an ID for the value element
+						controlWrapper.appendChild(labelElement);
+						controlWrapper.appendChild(controlElement);
+						controlWrapper.appendChild(valueElement);
+						break;
+
+					case 'BooleanControl':
+					case 'Bool':
+						controlWrapper = document.createElement('div');
+						controlWrapper.className = 'checkbox-decorated';
+						labelElement = document.createElement('label');
+						labelElement.textContent = control.name;
+						controlElement = document.createElement('input');
+						controlElement.type = 'checkbox';
+						controlElement.checked = control.value;
+						valueElement = document.createElement('span');
+						valueElement.textContent = control.value;
+						valueElement.id = control.name + '_value'; // Set an ID for the value element
+						controlWrapper.appendChild(labelElement);
+						controlWrapper.appendChild(controlElement);
+						controlWrapper.appendChild(valueElement);
+						break;
+
+					case 'MenuControl':
+						controlWrapper = document.createElement('div');
+						labelElement = document.createElement('label');
+						labelElement.textContent = control.name;
+						controlElement = document.createElement('select');
+						control.options.forEach(option => {
+							let optionElement = document.createElement('option');
+							optionElement.value = option;
+							optionElement.textContent = option;
+							controlElement.appendChild(optionElement);
+						});
+						controlElement.value = control.value;
+						valueElement = document.createElement('span');
+						valueElement.textContent = control.value;
+						valueElement.id = control.name + '_value'; // Set an ID for the value element
+						controlWrapper.appendChild(labelElement);
+						controlWrapper.appendChild(controlElement);
+						controlWrapper.appendChild(valueElement);
+						break;
+					// ... handle other control types
+				}
+
+				controlElement.id = control.name;
+				controlElement.name = control.name;
+				controlWrapper.appendChild(controlElement);
+				controlsContainer.appendChild(controlWrapper);
+
+				// Add event listener to update value text when the control's value changes
+				controlElement.addEventListener('input', function () {
+					valueElement.textContent = this.value;
+					// Send the updated value to the server
+					if (ws.readyState == WebSocket.OPEN) {
+						ws.send(JSON.stringify({
+							'set_control': {
+								[control.name]: (this.type === 'checkbox' ? this.checked : parseFloat(this.value))
+							}
+						}));
+					}
+				});
+			});
+
+			// XXX this does not belong here
+			document.getElementById('colour_gain_red').addEventListener('input', updateColourGains);
+			document.getElementById('colour_gain_blue').addEventListener('input', updateColourGains);
+		})
+		.catch(error => {
+			console.error('Error fetching controls:', error);
+		});
+
+		document.getElementById('update_controls_btn').addEventListener('click', function () {
+			if (ws.readyState == WebSocket.OPEN) {
+				ws.send(JSON.stringify({ 'update_controls': {} }));
+			}
+		});
+
 		function updateElementValue(elementId, newValue) {
 			var element = document.getElementById(elementId);
 			if (element && element.type === 'range') {
 				element.value = newValue;
 			}
-			var valueDisplay = document.getElementById(elementId + '_value');
-			if (valueDisplay) {
-				valueDisplay.textContent = newValue;
+			var valueElement = document.getElementById(elementId + '_value');
+			if (valueElement) {
+				valueElement.textContent = newValue;
 			}
 		}
 
@@ -368,11 +550,21 @@
 			var mode = this.checked ? 'triggered' : 'freerunning';
 			if (ws.readyState == WebSocket.OPEN) {
 				ws.send(JSON.stringify({
-					'camera_mode': {
+					'capture_mode': {
 						'value': mode
 					}
 				}));
 			}
+		});
+
+		document.getElementById('stream_frames').addEventListener('change', function () {
+			// Send the preference to the server using the websocket connection
+			ws.send(JSON.stringify({ 'stream_frames': { 'value': this.checked } }));
+		});
+
+		document.getElementById('use_base64_encoding').addEventListener('change', function () {
+			// Send the preference to the server using the websocket connection
+			ws.send(JSON.stringify({ 'use_base64_encoding': { 'value': this.checked } }));
 		});
 
 		Array.from(document.querySelectorAll('input[type=range]')).forEach(function (slider) {
@@ -382,24 +574,38 @@
 				document.getElementById(sliderId + '_value').textContent = sliderValue;
 				if (ws.readyState == WebSocket.OPEN) {
 					ws.send(JSON.stringify({
-						[sliderId]: {
-							'value': parseInt(sliderValue)
+						'set_control': {
+							[sliderId]: sliderValue
 						}
 					}));
 				}
 			});
 		});
 
-		document.getElementById('power_line_frequency').addEventListener('change', function () {
-			var frequency = this.value;
-			if (ws.readyState == WebSocket.OPEN) {
-				ws.send(JSON.stringify({
-					'power_line_frequency': {
-						'value': frequency
-					}
-				}));
-			}
-		});
+		function updateColourGains() {
+			var redGain = document.getElementById('colour_gain_red').value;
+			var blueGain = document.getElementById('colour_gain_blue').value;
+			ws.send(JSON.stringify({
+				'set_control': {
+					'ColourGains': [parseFloat(redGain), parseFloat(blueGain)]
+				}
+			}));
+		}
+
+		// document.getElementById('colour_gain_red').addEventListener('input', updateColourGains);
+		// document.getElementById('colour_gain_blue').addEventListener('input', updateColourGains);
+
+
+		// document.getElementById('power_line_frequency').addEventListener('change', function () {
+		// 	var frequency = this.value;
+		// 	if (ws.readyState == WebSocket.OPEN) {
+		// 		ws.send(JSON.stringify({
+		// 			'power_line_frequency': {
+		// 				'value': frequency
+		// 			}
+		// 		}));
+		// 	}
+		// });
 
 		document.getElementById('backlight_compensation').addEventListener('input', function () {
 			var compensation = this.value;
@@ -423,6 +629,62 @@
 				}));
 			}
 		});
+
+		document.getElementById('capture_mode').addEventListener('change', function () {
+		    var selectedMode = this.value;
+		    console.log(`Selected camera mode: ${selectedMode}`); // Log the selected mode
+		    if (ws.readyState == WebSocket.OPEN) {
+		        ws.send(JSON.stringify({
+		            'capture_mode': {
+		                'value': selectedMode
+		            }
+		        }));
+		    }
+		});
+
+		document.getElementById('fullscreen_submit_btn').addEventListener('click', function () {
+			// Get the image URL from the input
+			var imageUrl = document.getElementById('image_url').value;
+
+			// Verify WebSocket connection is open
+			if (ws.readyState == WebSocket.OPEN) {
+				// Send the image URL to the server via WebSocket message
+				ws.send(JSON.stringify({
+					'slm_image_url': imageUrl
+				}));
+
+				// Optional: Clear the input field after submission
+				// document.getElementById('image_url').value = '';
+			} else {
+				console.error('WebSocket connection is not open.');
+			}
+		});
+
+		// fetch('/controls')
+		// .then(response => response.json())
+		// .then(controls => {
+		// 	const controlsContainer = document.getElementById('controls-container'); // Ensure this ID matches your HTML
+
+		// 	controls.forEach(control => {
+		// 		const controlElement = document.createElement('div'); // Or another appropriate HTML element
+		// 		// Fill 'controlElement' with the proper HTML based on 'control' properties
+		// 		// For example:
+		// 		controlElement.innerHTML = `<label for="${control.name}">${control.name}</label>
+		// 					<input type="${determineInputType(control)}" id="${control.name}" />`;
+
+		// 		controlsContainer.appendChild(controlElement); // Append the newly created element to the container
+		// 	});
+		// })
+		
+		// function determineInputType(control) {
+		// 	// You can implement this function to decide which input type to use
+		// 	// based on the control type. This could be a simple mapper from
+		// 	// control.type to 'number', 'checkbox', 'range', etc.
+		// 	// This is just a placeholder function.
+		// 	return 'text';
+		// }
+
+
 	</script>
 </body>
 

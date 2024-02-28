@@ -13,7 +13,9 @@
 
 □ waveform generation abstraction (more LEDs, flexible camera triggering, etc.)
 
-□ rename combo.py, reorganize OpenFinchServer and add setup.py
+□ add other camera modes
+
+□ factor out OV2311 specifics
 
 □ clean up dashboard design
 
@@ -38,3 +40,5 @@
 ✓ set secondary monitor image over WS
 
 ✓ track open websockets for updates
+
+✓ rename combo.py, reorganize OpenFinchServer and add setup.py
