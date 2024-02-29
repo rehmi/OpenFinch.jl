@@ -45,7 +45,7 @@ class ImageCaptureServer:
         pi.set_mode(17, pigpio.OUTPUT)
         pi.write(17, 0)
         cap = ImageCapture(capture_raw=capture_raw)
-        cap.control_set("exposure_auto_priority", 0)
+        cap.set_control("exposure_auto_priority", 0)
         cap.open()
         return cap
 
