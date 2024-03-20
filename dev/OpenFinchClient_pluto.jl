@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.36
+# v0.19.37
 
 using Markdown
 using InteractiveUtils
@@ -37,11 +37,12 @@ md"# OpenFinch client development"
 # ╔═╡ a4521bc4-cbd1-4ab8-9a15-69998d78b3a2
 PlutoUI.TableOfContents()
 
-# ╔═╡ 8c314669-87f8-4e59-b321-853e590c79ee
-md"## Visualization"
-
-# ╔═╡ 7ef5dcbf-9810-409c-84f6-401a0abbd1c1
-PlutoTeachingTools.ChooseDisplayMode()
+# ╔═╡ 8a721e36-c5a1-4e38-9b8b-4f4a72dfa0c2
+begin
+	host = "finch.local"
+	port = 8000
+	URI = "ws://$host:$port/ws"
+end
 
 # ╔═╡ 723986e6-79c6-4078-b35d-234ee9be26fe
 md"## Benchmarks"
@@ -50,14 +51,14 @@ md"## Benchmarks"
 md"### Open/close connection"
 
 # ╔═╡ f423d1f0-2dfb-4e64-b936-0755169175e7
-@benchmark HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
+@benchmark HTTP.WebSockets.open(URI) do ws
 end
 
 # ╔═╡ 0cb248a9-7ce5-4882-8cd1-7021dc2f5341
 md"### Open/read image/close connection"
 
 # ╔═╡ 0cfe658f-a632-46de-95e3-16330fce3033
-@benchmark HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
+@benchmark HTTP.WebSockets.open(URI) do ws
     while true
 		msg = JSON.parse(WebSockets.receive(ws))
 		if haskey(msg, "image_response")
@@ -67,19 +68,13 @@ md"### Open/read image/close connection"
 	end
 end seconds=15 samples=100
 
-# ╔═╡ 6c3a0570-e146-4416-a579-3e4328fdaefc
-md"""## Collect 100 images
-
-Note that image decoding is done in a spawned thread to minimize impact on timing.
-"""
-
 # ╔═╡ 8210eb5f-8e4e-4080-8545-8936e8fa79d1
-@time HTTP.WebSockets.open("ws://finch.local:8000/ws") do ws
+@time HTTP.WebSockets.open(URI) do ws
 	req = JSON.json(Dict("image_request" => "now"))
 	global msgs = []
 	global imgs = []
 
-	n = 100
+	n = 333
 	while n > 0
 		WebSockets.send(ws, req)
 		msg = JSON.parse(WebSockets.receive(ws))
@@ -96,8 +91,20 @@ Note that image decoding is done in a spawned thread to minimize impact on timin
 	end
 end
 
+# ╔═╡ 6c3a0570-e146-4416-a579-3e4328fdaefc
+md"""## Collect $(length(imgs)) images
+
+Note that image decoding is done in a spawned thread to minimize impact on timing.
+"""
+
+# ╔═╡ 8c314669-87f8-4e59-b321-853e590c79ee
+md"## Visualization"
+
+# ╔═╡ 7ef5dcbf-9810-409c-84f6-401a0abbd1c1
+PlutoTeachingTools.ChooseDisplayMode()
+
 # ╔═╡ af651a15-43fb-4b35-ad55-424a04b53544
-mosaicview(imgs..., nrow=10, rowmajor=true, center=true, npad=100, fillvalue=colorant"gray")
+mosaicview(imgs..., ncol=16, rowmajor=true, center=true, npad=100, fillvalue=colorant"gray")
 
 # ╔═╡ 6ec24024-2d48-4226-860f-b775594fb8f3
 md"""
@@ -106,18 +113,18 @@ md"""
 Here, the default dashboard has been incorporated directly into the notebook.
 """
 
-# ╔═╡ 9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
-# don't really need this but keep it handy just in case...
-# using HypertextLiteral
-
 # ╔═╡ 16a975f8-81bf-4432-b1da-fe68f06eddfb
 HTML("""
 <html><body><script> 
-var host = "localhost"; 
-var port = "8000";
-</script></body></html>
-$(String(read("python/OpenFinchServer/dashboard.html")))
+var host = "$host";
+var port = "$port";
+</script></body></html> 
+$(String(read(joinpath(@__DIR__, "OpenFinchServer", "dashboard.html"))))
 """)
+
+# ╔═╡ 9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
+# HypertextLiteral also defines @htl and @htl_str, and then there's @html_str
+# all of which have different escaping rules and conversions
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1932,9 +1939,7 @@ version = "1.4.1+1"
 # ╟─0f31e892-29ef-43fa-be78-0d307707a3fc
 # ╠═68751a63-0b5c-405e-b97d-57a30d5b9f25
 # ╟─a4521bc4-cbd1-4ab8-9a15-69998d78b3a2
-# ╟─8c314669-87f8-4e59-b321-853e590c79ee
-# ╟─7ef5dcbf-9810-409c-84f6-401a0abbd1c1
-# ╠═af651a15-43fb-4b35-ad55-424a04b53544
+# ╠═8a721e36-c5a1-4e38-9b8b-4f4a72dfa0c2
 # ╟─723986e6-79c6-4078-b35d-234ee9be26fe
 # ╟─f1d86323-d3ce-47f9-ab86-266f99c627d4
 # ╠═f423d1f0-2dfb-4e64-b936-0755169175e7
@@ -1942,8 +1947,11 @@ version = "1.4.1+1"
 # ╠═0cfe658f-a632-46de-95e3-16330fce3033
 # ╟─6c3a0570-e146-4416-a579-3e4328fdaefc
 # ╠═8210eb5f-8e4e-4080-8545-8936e8fa79d1
+# ╟─8c314669-87f8-4e59-b321-853e590c79ee
+# ╟─7ef5dcbf-9810-409c-84f6-401a0abbd1c1
+# ╠═af651a15-43fb-4b35-ad55-424a04b53544
 # ╟─6ec24024-2d48-4226-860f-b775594fb8f3
-# ╠═9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
 # ╠═16a975f8-81bf-4432-b1da-fe68f06eddfb
+# ╠═9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
