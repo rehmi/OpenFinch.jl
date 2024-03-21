@@ -1,11 +1,26 @@
 import logging
 from aiohttp import web
 from web.server import CameraServer
+import argparse
 
 def main():
+    parser = argparse.ArgumentParser(description='OpenFinchServer Application')
+    parser.add_argument('--log', action='store_true', help='Direct logging to stdout')
+    parser.add_argument('--log-file', type=str, help='Direct logging to a specified file')
+
+    args = parser.parse_args()
+
+    fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
+
+    if args.log:
+        logging.basicConfig(level=logging.INFO, format=fmt)
+    elif args.log_file:
+        logging.basicConfig(level=logging.INFO, format=fmt, filename=args.log_file, filemode='w')
+    else:
+        # Disable logging by default
+        logging.disable(logging.CRITICAL)
+
     try:
-        fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
-        logging.basicConfig(level=logging.INFO, format=fmt, filename="OpenFinchServer.log", filemode="w")
         logging.info(f"starting {__name__}")
 
         server = CameraServer()
@@ -22,3 +37,7 @@ def main():
         server.shutdown()
         logging.info(f"ending {__name__}")
         pass
+
+if __name__ == '__main__':
+    main()
+
