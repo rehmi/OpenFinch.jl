@@ -13,9 +13,9 @@ import logging
 import subprocess
 import threading
 import queue
-from .frame_rate_monitor import FrameRateMonitor
+from utils.frame_rate_monitor import FrameRateMonitor
 
-from .OV2311 import OV2311Defaults
+from camera.models.OV2311 import OV2311Defaults
 
 class V4L2CapturedImage:
     def __init__(self, frame, metadata={}):
@@ -51,7 +51,7 @@ class V4L2CapturedImage:
 
 import v4l2py
 
-from .abstract_camera import AbstractCameraController
+from .abstract import AbstractCameraController
 
 class V4L2CameraController(AbstractCameraController):
     def __init__(self, device_id='/dev/video0', controls=OV2311Defaults):

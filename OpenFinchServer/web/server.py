@@ -11,13 +11,13 @@ import requests
 from collections import defaultdict
 import base64
 
-from .display import Display
-from .system_controller import SystemController
-from .abstract_camera import AbstractCameraController
-from ._picamera2 import Picamera2Controller
-from ._v4l2 import V4L2CameraController
-from .utils import BoundedQueue
-from .utils import BooleanControl, IntegerControl, FloatControl, MenuControl
+from utils.display import Display
+from camera.controllers.system import SystemController
+from camera.captures.abstract import AbstractCameraController
+from camera.captures.picamera2 import Picamera2Controller
+from camera.captures.v4l2 import V4L2CameraController
+from camera.utils.utils import BoundedQueue
+from camera.utils.utils import BooleanControl, IntegerControl, FloatControl, MenuControl
 
 class CameraServer:
     def __init__(self):
@@ -392,7 +392,7 @@ class CameraServer:
     async def handle_http(self, request):
         script_dir = os.path.dirname(__file__)
         if request.path == '/':
-            file_path = os.path.join(script_dir, 'dashboard.html')
+            file_path = os.path.join(script_dir, 'static/dashboard.html')
         else:
             file_path = os.path.join(script_dir, request.path.lstrip('/'))
         return web.FileResponse(file_path)

@@ -1,17 +1,18 @@
 # __init__.py
-from .sequencer import ScriptStatus, TriggerConfig, PiGPIOScript, PiGPIOWave
-from .camera_server import CameraServer
-from .display import Display
-from .frame_rate_monitor import FrameRateMonitor, StatsMonitor
-from .capture_controller import CaptureController
-from ._v4l2 import V4L2CapturedImage, V4L2CameraController
-from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
-from .system_controller import SystemController
-from .abstract_camera import AbstractCameraController
-from .wavegen import WaveGen
+from .gpio.sequencer import ScriptStatus, TriggerConfig, PiGPIOScript, PiGPIOWave
+from .web.server import CameraServer
+from .utils.display import Display
+from .utils.frame_rate_monitor import FrameRateMonitor, StatsMonitor
+from .camera.utils.capture import CaptureController
+from .camera.captures.v4l2 import V4L2CapturedImage, V4L2CameraController
+from .camera.captures.picamera2 import Picamera2CapturedImage, Picamera2Controller
+from .camera.controllers.system import SystemController
+from .camera.captures.abstract import AbstractCameraController
+from .gpio.wavegen import WaveGen
 
 
-from .OV2311 import OV2311Defaults
+from .camera.models.OV2311 import OV2311Defaults
+from .camera.models.IMX296 import IMX296Defaults
 
 # Expose only the necessary classes and modules
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
  	'Picamera2Controller',
 	'SystemController',
     'AbstractCameraController',
+	'IMX296Defaults',
 	'OV2311Defaults'
 ]

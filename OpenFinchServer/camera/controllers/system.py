@@ -4,11 +4,11 @@ import logging
 import os
 import pigpio
 
-from .capture_controller import CaptureController
-from .sequencer import start_pig, trigger_wave_script, TriggerConfig
-from .sequencer import PiGPIOScript, PiGPIOWave
-from .frame_rate_monitor import FrameRateMonitor
-from .abstract_camera import AbstractCameraController
+from camera.utils.capture import CaptureController
+from gpio.sequencer import start_pig, trigger_wave_script, TriggerConfig
+from gpio.sequencer import PiGPIOScript, PiGPIOWave
+from utils.frame_rate_monitor import FrameRateMonitor
+from camera.captures.abstract import AbstractCameraController
 
 class SystemController:
     def __init__(self, camera_controller: AbstractCameraController):

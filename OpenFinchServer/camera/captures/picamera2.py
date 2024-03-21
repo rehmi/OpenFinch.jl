@@ -12,11 +12,11 @@ import logging
 import subprocess
 import threading
 import queue
-from .frame_rate_monitor import FrameRateMonitor
-from .abstract_camera import AbstractCameraController
-from .utils import BoundedQueue, IntegerControl, BooleanControl, FloatControl, MenuControl
+from utils.frame_rate_monitor import FrameRateMonitor
+from .abstract import AbstractCameraController
+from camera.utils.utils import BoundedQueue, IntegerControl, BooleanControl, FloatControl, MenuControl
 
-from .IMX296 import IMX296Defaults
+from camera.models.IMX296 import IMX296Defaults
 
 class Picamera2CapturedImage:
     def __init__(self, frame, metadata={}):

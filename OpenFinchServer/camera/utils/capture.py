@@ -12,10 +12,10 @@ import logging
 import subprocess
 import threading
 import queue
-from .frame_rate_monitor import FrameRateMonitor
-from ._v4l2 import V4L2CapturedImage, V4L2CameraController
-from ._picamera2 import Picamera2CapturedImage, Picamera2Controller
-from .abstract_camera import AbstractCameraController
+from utils.frame_rate_monitor import FrameRateMonitor
+from camera.captures.v4l2 import V4L2CapturedImage, V4L2CameraController
+from camera.captures.picamera2 import Picamera2CapturedImage, Picamera2Controller
+from camera.captures.abstract import AbstractCameraController
 
 class CaptureController:
     # def __init__(self, device_id=0, capture_raw=False, controls={}):

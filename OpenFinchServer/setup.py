@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='OpenFinchServer',
-    version='0.1',
+    version='0.1.0',
     packages=find_packages(),
     install_requires=[
         'aiohttp',
@@ -19,9 +19,12 @@ setup(
         'statistics',
         'v4l2py'
     ],
-    # entry_points={
-    #     'console_scripts': [
-    #         'openfinchserver = OpenFinchServer.main:main',
-    #     ],
-    # },
+    scripts=[
+        'gpio/pigpio_reset'
+    ],
+     entry_points={
+        'console_scripts': [
+            'OpenFinchServer = web.main:main',
+        ],
+    },
 )

@@ -1,8 +1,7 @@
 from enum import Enum
 import pigpio
 from dataclasses import dataclass
-from .wavegen import WaveGen
-
+from gpio.wavegen import WaveGen
 
 class ScriptStatus(Enum):
     INITING = 0
@@ -148,8 +147,6 @@ def start_pig(host="localhost", port=8888):
         raise ValueError("Couldn't open connection to pigpiod")
         # raise Exception('Could not connect to pigpio')
     return pig
-
-from .wavegen import WaveGen
 
 class PiGPIOWave:
     def __init__(self, pig, config):
