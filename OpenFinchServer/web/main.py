@@ -2,11 +2,38 @@ import logging
 from aiohttp import web
 from web.server import CameraServer
 import argparse
+import pigpio
+
+def del_all_procs():
+    pi = pigpio.pi()
+    if not pi.connected:
+        logging.error("Could not connect to pigpio daemon. Is it running?")
+        return
+    
+    for i in range(32):
+        try:
+            pi.delete_script(i)
+        except Exception as e:
+            pass
+        
+    pi.wave_clear()  # Clear any existing waveforms
+
+    pi.stop()
+
+def set_trigger_mode(mode):
+    try:
+        with open('/sys/module/imx296/parameters/trigger_mode', 'w') as f:
+            f.write(str(mode))
+        logging.info(f"Trigger mode set to {mode}")
+    except IOError as e:
+        logging.error(f"Failed to set trigger mode: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description='OpenFinchServer Application')
     parser.add_argument('--log', action='store_true', help='Direct logging to stdout')
     parser.add_argument('--log-file', type=str, help='Direct logging to a specified file')
+    parser.add_argument('--delprocs', action='store_true', help='Delete all existing procs')
+    parser.add_argument('--set-trigger-mode', type=int, choices=[0, 1], nargs='?', const=1, default=None, help='Set trigger mode for imx296 module (0 or 1, default: 1 if argument given without value)')
 
     args = parser.parse_args()
 
@@ -19,6 +46,12 @@ def main():
     else:
         # Disable logging by default
         logging.disable(logging.CRITICAL)
+
+    if args.delprocs:
+        del_all_procs()
+
+    if args.set_trigger_mode is not None:
+        set_trigger_mode(args.set_trigger_mode)
 
     try:
         logging.info(f"starting {__name__}")
@@ -40,4 +73,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
+    
