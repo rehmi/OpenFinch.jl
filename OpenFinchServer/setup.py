@@ -20,11 +20,13 @@ setup(
         'v4l2py'
     ],
     scripts=[
-        'gpio/pigpio_reset'
+        # 'gpio/pigpio_reset',
+        # 'web/finchcontrol'
     ],
      entry_points={
         'console_scripts': [
             'OpenFinchServer = web.main:main',
+            'finchcontrol = web.finchcontrol:main'
         ],
     },
 )

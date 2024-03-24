@@ -45,10 +45,14 @@ def parse_arguments(args):
         controls[key] = value
     return controls
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) < 2:
         print("Usage: python script.py control1=value1 control2=value2 ...")
         sys.exit(1)
     
     controls = parse_arguments(sys.argv[1:])
     asyncio.run(send_controls_to_openfinch(controls))
+
+
+if __name__ == "__main__":
+    main()
