@@ -40,8 +40,6 @@ class CameraServer:
             'sweep_enable':
                 lambda data: self.handle_sweep_enable(data),
             # XXX need to rethink this, or at least also pass ws as well; maybe use *args instead of data?
-            # 'stream_frames':
-                # lambda data: self.handle_stream_frames(ws, data),
             'update_controls': lambda data: self.handle_update_controls(data),
             'capture_mode': lambda data: self.handle_capture_mode(data),
             'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
@@ -65,7 +63,8 @@ class CameraServer:
             'exposure_auto_priority': lambda data: self.handle_camera_control('exposure_auto_priority', data),
             'colour_gain_red': lambda data: self.handle_dummy('colour_gain_red', data),
             'colour_gain_blue': lambda data: self.handle_dummy('colour_gain_blue', data),
-            'ColourGain': lambda data: self.handle_colour_gain(data),
+            # XXX what was this unfinished thought?
+            # 'ColourGains': lambda data: self.handle_colour_gain(data),
         }
 
         try:
@@ -86,6 +85,27 @@ class CameraServer:
             await self.handlers[control_name]({'value': control_value})
         else:
             await self.handle_camera_control(control_name, {'value': control_value})
+
+    def set_color_gains(self, red_gain, blue_gain):
+        """
+        Sets the color gains for the camera.
+
+        Parameters:
+        - red_gain (float): The gain value for the red channel.
+        - blue_gain (float): The gain value for the blue channel.
+        """
+        # Ensure the gains are within the allowed range as defined in IMX296.py
+        # For simplicity, let's assume the range is (0.0, 32.0) for both gains.
+        # You might want to fetch the actual range from the camera controls if it varies.
+        red_gain = max(0.0, min(32.0, red_gain))
+        blue_gain = max(0.0, min(32.0, blue_gain))
+
+        # Set the ColourGains control
+        try:
+            self.camctrl.set_controls({"ColourGains": (red_gain, blue_gain)})
+            logging.info(f"Color gains set to red: {red_gain}, blue: {blue_gain}")
+        except Exception as e:
+            logging.error(f"Failed to set color gains: {e}")
 
     async def handle_ws(self, request):
         ws = web.WebSocketResponse()
@@ -123,15 +143,15 @@ class CameraServer:
 
                     # Check for the slm_image_url command
                     if 'slm_image_url' in data:
-                        await self.handle_display_full_screen(data['slm_image_url'])
+                        await self.handle_display_image_url(data['slm_image_url'])
                         
-                    if data.get('SLM_image', '') == 'next':
+                    if data.get('slm_image', '') == 'next':
                         image_blob = await ws.receive_bytes()
                         # logging.debug(f"SLM_image received {len(image_blob)} bytes")
                         img = Image.open(BytesIO(image_blob))
                         # logging.debug(f"img has type {type(img)} and size {img.size}")
-                        self.display.move_to_monitor(self.monitor_index)
-                        self.update_display(img)
+                        # self.display.move_to_monitor(self.monitor_index)
+                        self.display_image(img)
                 except Exception as e:
                     logging.exception("CameraServer.handle_ws")
         
@@ -228,33 +248,21 @@ class CameraServer:
     def initialize_display(self):
         # Initialize display and script/wave-related components
         self.display = Display()
-        # XXX begin hack to ensure the display appears on monitor[0]
-        self.display.create_window()
-        self.display.move_to_monitor(0)
-        self.display.update()
-        self.display.move_to_monitor(0)
-        self.display.update()
-        # self.display.hide_window()
-        self.display.update()
-        # XXX end hack
 
     def update_display(self, img):
         img_array = np.array(img)
         self.display.display_image(img_array)
-        self.display.update()
 
-    async def handle_display_full_screen(self, image_url):
-        # You would have logic here to load the image from the given URL
-        # and then call the Display class method to show it full screen.
-        # Example (you might need to tailor this to your Display class methods):
+    async def handle_display_image_url(self, image_url):
         try:
             response = requests.get(image_url)
             response.raise_for_status()
             image_bytes = response.content
             img = Image.open(BytesIO(image_bytes))
-            self.display.switch_to_fullscreen()
-            self.display.move_to_monitor(1)
-            self.update_display(img)
+            self.display.display_image(img)
+            # self.display.switch_to_fullscreen()
+            # self.display.move_to_monitor(1)
+            # self.update_display(img)
         except requests.exceptions.HTTPError as err:
             logging.exception(f"Error retrieving image")
 

@@ -5,19 +5,134 @@ import os
 import logging
 import requests
 import time
+import mmap
+from PIL import Image
 
+# Common interface for display operations
+class DisplayBackend:
+    def display_image(self, img):
+        raise NotImplementedError
+
+# Frontend API
 class Display:
     def __init__(self, window_name='SLM image', monitor_index=0):
-        # if 'DISPLAY' not in os.environ:
-        # 	os.environ['DISPLAY'] = ':0'
+        self.backend = self._select_backend(window_name)
 
+    def _select_backend(self, window_name):
+        if 'DISPLAY' in os.environ:
+            return WindowSystemDisplay(window_name)
+        elif os.path.exists("/dev/fb0"):
+            return FramebufferDisplay()
+        else:
+            logging.error("No suitable display backend found.")
+            return None
+
+    def display_image(self, img):
+        if self.backend:
+            self.backend.display_image(img)
+        else:
+            logging.error("No backend available for displaying images.")
+
+class FramebufferDisplay(DisplayBackend):
+    def get_framebuffer_dimensions(self):
+        """
+        Retrieves the dimensions of the framebuffer.
+
+        Returns:
+        - tuple: The width and height of the framebuffer.
+        """
+        # This command should return the dimensions in a format like "800x600"
+        # Adjust the command as necessary for your specific environment
+        output = os.popen('fbset -s | grep geometry').read()
+        dimensions = output.split()
+        width = int(dimensions[1])
+        height = int(dimensions[2])
+        return width, height
+
+    def display_image_on_framebuffer(self, image_path):
+        """
+        Displays an image directly on the framebuffer using a memory-mapped file.
+
+        Parameters:
+        - image_path (str): The path to the image file.
+        """
+        # Load the image
+        img = Image.open(image_path)
+
+        # Get the framebuffer dimensions
+        width, height = self.get_framebuffer_dimensions()
+
+        # Resize the image to fit the framebuffer dimensions
+        img = img.resize((width, height))
+
+        # Convert the image to the framebuffer format (e.g., RGB565)
+        img_data = self.convert_image_to_framebuffer_format(img)
+
+        # Write the image data to the framebuffer
+        self.write_to_framebuffer(img_data, width, height)
+
+    def convert_image_to_framebuffer_format(self, img):
+        """
+        Converts a PIL Image to the format required by the framebuffer (e.g., RGB565).
+
+        Parameters:
+        - img (PIL.Image): The image to convert.
+
+        Returns:
+        - numpy.ndarray: The image data in framebuffer format.
+        """
+        img = img.convert('RGB')
+        img_data = np.array(img, dtype=np.uint8)
+        r = (img_data[:,:,0] >> 3) & 0x1F
+        g = (img_data[:,:,1] >> 2) & 0x3F
+        b = (img_data[:,:,2] >> 3) & 0x1F
+        rgb565 = (r << 11) | (g << 5) | b
+        return rgb565.astype(np.uint16)
+
+    def write_to_framebuffer(self, img_data, width, height):
+        """
+        Writes image data directly to the framebuffer device using memory mapping.
+
+        Parameters:
+        - img_data (numpy.ndarray): The image data in the correct format for the framebuffer.
+        - width (int): The width of the framebuffer.
+        - height (int): The height of the framebuffer.
+        """
+        framebuffer_device = "/dev/fb0"  # Path to the framebuffer device
+
+        # Calculate the size of the framebuffer in bytes
+        fb_size = width * height * 2  # 2 bytes per pixel for RGB565
+
+        with open(framebuffer_device, "r+b") as fb:
+            mm = mmap.mmap(fb.fileno(), fb_size)
+            mm.write(img_data.tobytes())
+            mm.close()
+
+
+class WindowSystemDisplay(DisplayBackend):
+    def __init__(self, window_name='SLM image', monitor_index=0):
         self.monitor_index = monitor_index
         self.window_mode = "normal"
         self.window_name = window_name
         self.window_created = False
+        self.use_framebuffer = False
 
-        # self.create_window()
+        # XXX begin hack to ensure the display appears on monitor[0]
+        self.create_window()
+        self.move_to_monitor(0)
+        self.update()
+        self.move_to_monitor(0)
+        self.update()
+        # self.hide_window()
+        self.update()
+        # XXX end hack
 
+
+    def display_image(self, img):
+        self.image = img
+        cv2.imshow(self.window_name, self.image)
+        self.update()
+    
     def set_image_url(self, url):
         response = requests.get(url)
         img_bytes = np.asarray(bytearray(response.content), dtype="uint8")

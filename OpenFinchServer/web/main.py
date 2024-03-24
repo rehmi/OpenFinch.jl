@@ -34,6 +34,7 @@ def main():
     parser.add_argument('--log-file', type=str, help='Direct logging to a specified file')
     parser.add_argument('--delprocs', action='store_true', help='Delete all existing procs')
     parser.add_argument('--set-trigger-mode', type=int, choices=[0, 1], nargs='?', const=1, default=None, help='Set trigger mode for imx296 module (0 or 1, default: 1 if argument given without value)')
+    parser.add_argument('--color-gains', type=str, help='Set color gains as a comma-separated pair (e.g., "1.5,1.2" for red and blue gains)')
 
     args = parser.parse_args()
 
@@ -47,14 +48,23 @@ def main():
         # Disable logging by default
         logging.disable(logging.CRITICAL)
 
-    if args.delprocs:
-        del_all_procs()
-
-    if args.set_trigger_mode is not None:
-        set_trigger_mode(args.set_trigger_mode)
-
     try:
         logging.info(f"starting {__name__}")
+
+        if args.delprocs:
+            del_all_procs()
+
+        if args.set_trigger_mode is not None:
+            set_trigger_mode(args.set_trigger_mode)
+
+        color_gains = args.color_gains
+
+        if color_gains:
+            try:
+                red_gain, blue_gain = map(float, color_gains.split(','))
+            except ValueError:
+                logging.error("Invalid format for --color-gains. Expected format: 'red_gain,blue_gain'")
+                exit(1)
 
         server = CameraServer()
 
@@ -62,6 +72,9 @@ def main():
         app.router.add_get('/', server.handle_http)
         app.router.add_get('/ws', server.handle_ws)
         app.on_startup.append(server.on_startup)
+
+        if color_gains:
+            server.set_color_gains(red_gain, blue_gain)
 
         web.run_app(app, host='0.0.0.0', port=8000)
     except KeyboardInterrupt:

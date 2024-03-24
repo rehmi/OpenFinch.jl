@@ -72,7 +72,9 @@ class Picamera2Controller(AbstractCameraController):
             'exposure_auto': None,  # No corresponding control in Picamera2
             'exposure_absolute': None,  # No corresponding control in Picamera2
             'exposure_auto_priority': None,  # No corresponding control in Picamera2
+            'analog_gain': 'AnalogueGain',
             'analogue_gain': 'AnalogueGain',
+            'color_gains': 'ColourGains',
             'colour_gains': 'ColourGains',
             'awb_enable': 'AwbEnable',
             'ae_enable': 'AeEnable',
