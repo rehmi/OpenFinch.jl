@@ -7,6 +7,7 @@ import requests
 import time
 import mmap
 from PIL import Image
+from io import BytesIO
 
 # Common interface for display operations
 class DisplayBackend:
@@ -32,8 +33,18 @@ class Display:
             self.backend.display_image(img)
         else:
             logging.error("No backend available for displaying images.")
+    def test_display(self):
+        self.backend.test_display()
 
 class FramebufferDisplay(DisplayBackend):
+    def __init__(self):
+        self.width, self.height = self.get_framebuffer_dimensions()
+        # this is the frambuffer for video output - note that this is a 16 bit RGB
+        # other setups will likely have a different format and dimensions which you can check with
+        # fbset -fb /dev/fb0 
+        self.fb = self.get_mapped_framebuffer()
+        self.tty = "/dev/tty1"
+
     def get_framebuffer_dimensions(self):
         """
         Retrieves the dimensions of the framebuffer.
@@ -49,64 +60,95 @@ class FramebufferDisplay(DisplayBackend):
         height = int(dimensions[2])
         return width, height
 
-    def display_image_on_framebuffer(self, image_path):
-        """
-        Displays an image directly on the framebuffer using a memory-mapped file.
-
-        Parameters:
-        - image_path (str): The path to the image file.
-        """
-        # Load the image
-        img = Image.open(image_path)
-
-        # Get the framebuffer dimensions
-        width, height = self.get_framebuffer_dimensions()
-
+    def display_image(self, img):
         # Resize the image to fit the framebuffer dimensions
-        img = img.resize((width, height))
+        img = img.resize((self.width, self.height))
 
         # Convert the image to the framebuffer format (e.g., RGB565)
-        img_data = self.convert_image_to_framebuffer_format(img)
+        img_data = self.convert_image_to_rgb565(img)
 
         # Write the image data to the framebuffer
-        self.write_to_framebuffer(img_data, width, height)
+        # self.write_to_framebuffer(img_data, width, height)
+        self.fb[:] = img_data
 
-    def convert_image_to_framebuffer_format(self, img):
-        """
-        Converts a PIL Image to the format required by the framebuffer (e.g., RGB565).
+    def disable_cursor(self):
+        # this turns off the cursor blink:
+        #os.system (f"TERM=linux setterm -foreground black -clear all >{tty}")
+        os.system (f"TERM=linux setterm -cursor off >{self.tty}")
 
-        Parameters:
-        - img (PIL.Image): The image to convert.
+    def get_mapped_framebuffer(self):
+        # this is the frambuffer for analog video output - note that this is a 16 bit RGB
+        # other setups will likely have a different format and dimensions which you can check with
+        # fbset -fb /dev/fb0 
+        return np.memmap('/dev/fb0', dtype='uint16',mode='w+', shape=(self.height, self.width))
 
-        Returns:
-        - numpy.ndarray: The image data in framebuffer format.
-        """
-        img = img.convert('RGB')
-        img_data = np.array(img, dtype=np.uint8)
-        r = (img_data[:,:,0] >> 3) & 0x1F
-        g = (img_data[:,:,1] >> 2) & 0x3F
-        b = (img_data[:,:,2] >> 3) & 0x1F
+    def enable_cursor(self):
+        # turn on the cursor again:    
+        #os.system(f"TERM=linux setterm -foreground white -clear all >{tty}")
+        os.system (f"TERM=linux setterm -cursor on >{self.tty}")
+
+    # Function to convert PIL image to 5-6-5 RGB format using NumPy
+    def convert_image_to_rgb565(self, image):
+        # Convert the image to RGB if it's not already in RGB mode
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # Convert the image to a NumPy array
+        img_np = np.array(image)
+
+        # Resize image to match your framebuffer's resolution, if necessary
+        # img_np = cv2.resize(img_np, (framebuffer_width, framebuffer_height))
+
+        # Convert pixels to 5-6-5 format
+        r = (img_np[:,:,0] >> 3).astype(np.uint16)
+        g = (img_np[:,:,1] >> 2).astype(np.uint16)
+        b = (img_np[:,:,2] >> 3).astype(np.uint16)
         rgb565 = (r << 11) | (g << 5) | b
-        return rgb565.astype(np.uint16)
 
-    def write_to_framebuffer(self, img_data, width, height):
-        """
-        Writes image data directly to the framebuffer device using memory mapping.
+        # Convert the 5-6-5 RGB array to bytes
+        return rgb565.tobytes()
 
-        Parameters:
-        - img_data (numpy.ndarray): The image data in the correct format for the framebuffer.
-        - width (int): The width of the framebuffer.
-        - height (int): The height of the framebuffer.
-        """
-        framebuffer_device = "/dev/fb0"  # Path to the framebuffer device
+    def display_image_url(self, image_url):
+        try:
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_bytes = response.content
+            img = Image.open(BytesIO(image_bytes))
+            self.display_image(img)
+        except requests.exceptions.HTTPError as err:
+            logging.exception(f"Error retrieving image")
 
-        # Calculate the size of the framebuffer in bytes
-        fb_size = width * height * 2  # 2 bytes per pixel for RGB565
+    def test_display(self):
+        test_image_url = "https://www.belle-nuit.com/site/files/testchart720.tif"
+        # self.display_image_url(test_image_url)
 
-        with open(framebuffer_device, "r+b") as fb:
-            mm = mmap.mmap(fb.fileno(), fb_size)
-            mm.write(img_data.tobytes())
-            mm.close()
+        # URL of the image
+        test_image_url = "https://m.media-amazon.com/images/I/71D-PfmrvjL._AC_SL1200_.jpg"
+
+        # Fetch the image
+        response = requests.get(test_image_url)
+        img = Image.open(BytesIO(response.content))
+
+        resized = img.resize((self.width, self.height))
+
+        # Convert the image to 5-6-5 RGB format
+        img_rgb565 = self.convert_image_to_rgb565(resized)
+
+        self.disable_cursor()
+
+        # # Open the framebuffer device
+        # with open('/dev/fb0', 'wb') as fb:
+        #     # Write the image data to the framebuffer
+        #     fb.write(img_rgb565)
+
+        # fb = self.get_mapped_framebuffer()
+
+        # Convert the byte array to a NumPy array of type uint16
+        img_rgb565_np = np.frombuffer(img_rgb565, dtype=np.uint16)
+
+        # Reshape the array to match the framebuffer's dimensions
+        # and assign the reshaped array to the framebuffer
+        self.fb[:] =  img_rgb565_np.reshape(self.height, self.width)
 
 
 class WindowSystemDisplay(DisplayBackend):
@@ -215,12 +257,6 @@ class WindowSystemDisplay(DisplayBackend):
         cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
         self.update()
 
-import unittest
-
-class TestDisplayMethods(unittest.TestCase):
-    def setUp(self):
-        self.display = Display('foo')
-
     def test_display(self):
         self.display.switch_mode("normal")
         self.display.move_to_monitor(0)
@@ -251,5 +287,20 @@ class TestDisplayMethods(unittest.TestCase):
 
         time.sleep(1)
 
+import unittest
+
+class TestDisplayMethods(unittest.TestCase):
+    def setup(self):
+        self.display = Display('foo')
+        print(f"self.display = {self.display}")
+
+    def test_display(self):
+        self.display = Display('foo')
+        print(f"self.display = {self.display}")
+        self.display.test_display()
+
 if __name__ == '__main__':
     unittest.main()
+    # display = Display('foo')
+    # print(f"display = {display}")
+    # display.test_display()

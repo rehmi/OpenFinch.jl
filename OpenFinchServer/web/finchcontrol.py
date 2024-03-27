@@ -10,8 +10,8 @@ async def send_controls_to_openfinch(controls):
     async with session.ws_connect("ws://winch.local:8000/ws") as ws:
         await ws.send_json({"set_control": controls})
         # If you want to see the response from the server, uncomment the next lines
-        # response = await ws.receive()
-        # print(response.data)
+        response = await ws.receive()
+        print(response.data)
         await session.close()
 
 def parse_arguments(args):
@@ -49,7 +49,7 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python script.py control1=value1 control2=value2 ...")
         sys.exit(1)
-    
+
     controls = parse_arguments(sys.argv[1:])
     asyncio.run(send_controls_to_openfinch(controls))
 
