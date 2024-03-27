@@ -58,6 +58,49 @@ Modify settings in `camera/models/IMX296.py` and `camera/models/OV2311.py` as ne
 ```bash
 python web/main.py
 ```
+### Modify `udev` rules to allow changing IMX296 trigger mode
+
+### Modifying Sysfs File Permissions for the IMX296 Module
+
+By following these instructions, you can modify the `trigger_mode` file permissions of the IMX296 module, allowing user programs to write values to it without needing root access. This concise guide will walk you through setting up a `udev` rule to allow non-root users to write to the `trigger_mode` parameter of the IMX296 module.
+
+1. **Identify the Target File:**
+   - The file in question is located at `/sys/module/imx296/parameters/trigger_mode`.
+
+2. **Create a Udev Rule File:**
+   - Open your terminal.
+   - Navigate to `/etc/udev/rules.d/`.
+   - Use a text editor (e.g., `nano` or `vim`) to create a new file named `99-imx296-permissions.rules`.
+
+     ```
+     sudo nano /etc/udev/rules.d/99-imx296-permissions.rules
+     ```
+
+3. **Write the Rule:**
+   - In the newly created file, input the following udev rule:
+
+     ```
+     ACTION=="add", SUBSYSTEM=="module", KERNEL=="imx296", RUN+="/bin/chmod 0666 /sys/module/imx296/parameters/trigger_mode"
+     ```
+
+   - This rule changes the permissions of `trigger_mode` to `0666` (read and write for everyone) when the IMX296 module is loaded.
+
+4. **Reload Udev Rules:**
+   - To apply your new rule, reload the udev rules with the following commands:
+
+     ```
+     sudo udevadm control --reload-rules
+     sudo udevadm trigger
+     ```
+
+5. **Verify:**
+   - Ensure the rule works by checking the permissions of the `trigger_mode` file:
+
+     ```
+     ls -l /sys/module/imx296/parameters/trigger_mode
+     ```
+
+   - If done correctly, the permissions should reflect the changes made by your udev rule.
 
 ## Usage
 
