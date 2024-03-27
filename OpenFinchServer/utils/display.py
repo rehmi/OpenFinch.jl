@@ -61,15 +61,19 @@ class FramebufferDisplay(DisplayBackend):
         return width, height
 
     def display_image(self, img):
-        # Resize the image to fit the framebuffer dimensions
-        img = img.resize((self.width, self.height))
-
-        # Convert the image to the framebuffer format (e.g., RGB565)
-        img_data = self.convert_image_to_rgb565(img)
-
-        # Write the image data to the framebuffer
-        # self.write_to_framebuffer(img_data, width, height)
-        self.fb[:] = img_data
+        resized = img.resize((self.width, self.height))
+        img_rgb565 = self.convert_image_to_rgb565(resized)
+        self.disable_cursor()
+        # Convert the byte array to a NumPy array of type uint16
+        img_rgb565_np = np.frombuffer(img_rgb565, dtype=np.uint16)
+        # Reshape the array to match the framebuffer's dimensions
+        # and assign the reshaped array to the framebuffer
+        self.fb[:] =  img_rgb565_np.reshape(self.height, self.width)
+        # response = requests.get(image_url)
+        # response.raise_for_status()
+        # image_bytes = response.content
+        # img = Image.open(BytesIO(image_bytes))
+        # self.display_image(img)
 
     def disable_cursor(self):
         # this turns off the cursor blink:
@@ -110,10 +114,9 @@ class FramebufferDisplay(DisplayBackend):
 
     def display_image_url(self, image_url):
         try:
+            # Fetch the image
             response = requests.get(image_url)
-            response.raise_for_status()
-            image_bytes = response.content
-            img = Image.open(BytesIO(image_bytes))
+            img = Image.open(BytesIO(response.content))
             self.display_image(img)
         except requests.exceptions.HTTPError as err:
             logging.exception(f"Error retrieving image")
@@ -124,32 +127,7 @@ class FramebufferDisplay(DisplayBackend):
 
         # URL of the image
         test_image_url = "https://m.media-amazon.com/images/I/71D-PfmrvjL._AC_SL1200_.jpg"
-
-        # Fetch the image
-        response = requests.get(test_image_url)
-        img = Image.open(BytesIO(response.content))
-
-        resized = img.resize((self.width, self.height))
-
-        # Convert the image to 5-6-5 RGB format
-        img_rgb565 = self.convert_image_to_rgb565(resized)
-
-        self.disable_cursor()
-
-        # # Open the framebuffer device
-        # with open('/dev/fb0', 'wb') as fb:
-        #     # Write the image data to the framebuffer
-        #     fb.write(img_rgb565)
-
-        # fb = self.get_mapped_framebuffer()
-
-        # Convert the byte array to a NumPy array of type uint16
-        img_rgb565_np = np.frombuffer(img_rgb565, dtype=np.uint16)
-
-        # Reshape the array to match the framebuffer's dimensions
-        # and assign the reshaped array to the framebuffer
-        self.fb[:] =  img_rgb565_np.reshape(self.height, self.width)
-
+        self.display_image_url(test_image_url)
 
 class WindowSystemDisplay(DisplayBackend):
     def __init__(self, window_name='SLM image', monitor_index=0):
@@ -290,17 +268,12 @@ class WindowSystemDisplay(DisplayBackend):
 import unittest
 
 class TestDisplayMethods(unittest.TestCase):
-    def setup(self):
+    def setUp(self):
         self.display = Display('foo')
         print(f"self.display = {self.display}")
 
     def test_display(self):
-        self.display = Display('foo')
-        print(f"self.display = {self.display}")
         self.display.test_display()
 
 if __name__ == '__main__':
     unittest.main()
-    # display = Display('foo')
-    # print(f"display = {display}")
-    # display.test_display()
