@@ -126,7 +126,10 @@ class CameraServer:
                 try:
                     if 'set_control' in data:
                         for control_name, control_value in data['set_control'].items():
-                            await self.set_control(control_name, control_value)
+                            if control_name == 'slm_image_url':
+                                await self.handle_display_image_url(control_value)
+                            else:
+                                await self.set_control(control_name, control_value)
                     
                     for key, handler in self.handlers.items():
                         if key in data:
