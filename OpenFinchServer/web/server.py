@@ -119,57 +119,84 @@ class CameraServer:
         asyncio.create_task(self.active_connection_wrapper(ws))
         
         # start a handler loop that persists as long as the websocket
-        async for msg in ws:
-            if msg.type == web.WSMsgType.TEXT:
-                data = json.loads(msg.data)
-                logging.debug(f"Received message: {data}")  # Log the received message
-                try:
-                    if 'set_control' in data:
-                        for control_name, control_value in data['set_control'].items():
-                            if control_name == 'slm_image_url':
-                                await self.handle_display_image_url(control_value)
+        try:
+            async for msg in ws:
+                if msg.type == web.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    logging.debug(f"Received message: {data}")  # Log the received message
+                    try:
+                        if 'set_control' in data:
+                            for control_name, control_value in data['set_control'].items():
+                                if control_name == 'slm_image_url':
+                                    await self.handle_display_image_url(control_value)
+                                else:
+                                    await self.set_control(control_name, control_value)
+                        
+                        for key, handler in self.handlers.items():
+                            if key in data:
+                                await handler(data[key])
+
+                        if 'stream_frames' in data:
+                            await self.handle_stream_frames(ws, data['stream_frames'])
+                            
+                        if 'use_base64_encoding' in data:
+                            await self.handle_use_base64_encoding(ws, data['use_base64_encoding'])
+
+                        if 'image_request' in data:
+                            await self.handle_image_request(data, ws)
+
+                        # Check for the slm_image_url command
+                        if 'slm_image_url' in data:
+                            await self.handle_display_image_url(data['slm_image_url'])
+
+                        if 'slm_image' in data:
+                            encoded_image = data['slm_image']
+                            logging.info(f"SLM_image received {len(encoded_image)} bytes")
+
+                            if encoded_image == 'next':
+                                image_blob = await ws.receive_bytes()
+                                img = Image.open(BytesIO(image_blob))
+                                # self.display.move_to_monitor(self.monitor_index)
                             else:
-                                await self.set_control(control_name, control_value)
-                    
-                    for key, handler in self.handlers.items():
-                        if key in data:
-                            await handler(data[key])
+                                # Decode the base64 image and display it
+                                image_bytes = base64.b64decode(encoded_image)
+                                img = Image.open(BytesIO(image_bytes))
+                            
+                            logging.info(f"img has type {type(img)} and size {img.size}")
+                            self.display.display_image(img)
 
-                    if 'stream_frames' in data:
-                        await self.handle_stream_frames(ws, data['stream_frames'])
-                        
-                    if 'use_base64_encoding' in data:
-                        await self.handle_use_base64_encoding(ws, data['use_base64_encoding'])
-
-                    if 'image_request' in data:
-                        await self.handle_image_request(data, ws)
-
-                    # Check for the slm_image_url command
-                    if 'slm_image_url' in data:
-                        await self.handle_display_image_url(data['slm_image_url'])
-                        
-                    if data.get('slm_image', '') == 'next':
-                        image_blob = await ws.receive_bytes()
-                        # logging.debug(f"SLM_image received {len(image_blob)} bytes")
-                        img = Image.open(BytesIO(image_blob))
-                        # logging.debug(f"img has type {type(img)} and size {img.size}")
-                        # self.display.move_to_monitor(self.monitor_index)
-                        self.display_image(img)
-                except Exception as e:
-                    logging.exception("CameraServer.handle_ws")
-        
-        # the websocket has closed or an error occurred.
-        logging.debug(f"WebSocket connection closed: {ws}")
-        # self.active_connections.remove(ws)
+                    except Exception as e:
+                        logging.exception("CameraServer.handle_ws")
+        except Exception as e:
+            logging.exception("Error handling WebSocket message")
+        finally:
+            # the websocket has closed or an error occurred.
+            logging.debug(f"WebSocket connection closed: {ws}")
+            await self.cleanup_connection(ws)                   
+            # self.active_connections.remove(ws)
+            if ws in self.active_connections:
+                del self.active_connections[ws]
+    
+    async def cleanup_connection(self, ws):
         if ws in self.active_connections:
             del self.active_connections[ws]
-
+        # Perform additional cleanup if necessary
+        logging.info(f"Cleaned up connection {ws}")
+    
     async def send_str_and_bytes(self, ws, str_data, bytes_data):
         await self.message_queues[ws].put((str_data, bytes_data))
 
     async def send_str(self, ws, str_data):
-        await self.message_queues[ws].put((str_data,))
-
+        try:
+            if ws.closed:
+                logging.warning(f"Attempt to send data to closed connection {ws}")
+                await self.cleanup_connection(ws)
+            else:
+                await ws.send_str(str_data)
+        except Exception as e:
+            logging.exception(f"Failed to send data to {ws}")
+            await self.cleanup_connection(ws)
+    
     async def active_connection_wrapper(self, ws):
         try:
             while True:
@@ -180,13 +207,32 @@ class CameraServer:
                     else:
                         await ws.send_bytes(message)
         except Exception as e:
-            logging.exception(f"active_connection_wrapper: error on WebSocket")
+            pass
+            # logging.exception(f"active_connection_wrapper: error on WebSocket")
+        finally:
+            # Attempt to gracefully close the connection
             try:
+                logging.info("Waiting for remaining messages to be sent before closing websocket.")
+                # Wait for any remaining messages to be sent
+                while not self.message_queues[ws].empty():
+                    messages = await self.message_queues[ws].get()
+                    for message in messages:
+                        if isinstance(message, str):
+                            await ws.send_str(message)
+                        else:
+                            await ws.send_bytes(message)
+                # Close the WebSocket connection
+                logging.info("Remaining messages have been sent, closing websocket")
+                await ws.close()
+                logging.info("WebSocket connection closed gracefully.")
+            except Exception as e:
+                logging.exception("Error while trying to gracefully close WebSocket connection.")
+            finally:
+                # Clean up the connection and message queue
                 if ws in self.active_connections:
                     del self.active_connections[ws]
-                del self.message_queues[ws]
-            except KeyError:
-                pass
+                if ws in self.message_queues:
+                    del self.message_queues[ws]
 
     async def broadcast_to_active_connections(self, func, *args):	
         tasks = [
