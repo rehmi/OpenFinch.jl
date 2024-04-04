@@ -5,13 +5,35 @@ import asyncio
 import sys
 import json
 
+import base64
+import argparse
+
+# Add a new command-line argument for the image file path
+parser = argparse.ArgumentParser(description='Send controls to OpenFinch.')
+parser.add_argument('--image', type=str, help='Path to the local image file to send.')
+parser.add_argument('controls', nargs='*', help='Controls in the format control1=value1 control2=value2 ...')
+args = parser.parse_args()
+
+# Function to encode an image file to base64
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
 async def send_controls_to_openfinch(controls):
     session = aiohttp.ClientSession()
     async with session.ws_connect("ws://winch.local:8000/ws") as ws:
         await ws.send_json({"set_control": controls})
-        # If you want to see the response from the server, uncomment the next lines
         response = await ws.receive()
-        print(response.data)
+        response = await ws.receive()
+        await session.close()
+
+async def send_image_to_openfinch(encoded_image):
+    session = aiohttp.ClientSession()
+    async with session.ws_connect("ws://winch.local:8000/ws") as ws:
+        await ws.send_json({"slm_image": encoded_image})
+        
+        response = await ws.receive()
+        response = await ws.receive()
         await session.close()
 
 def parse_arguments(args):
@@ -46,12 +68,23 @@ def parse_arguments(args):
     return controls
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python script.py control1=value1 control2=value2 ...")
-        sys.exit(1)
+    # if len(sys.argv) < 2:
+    #     print("Usage: python script.py control1=value1 control2=value2 ...")
+    #     sys.exit(1)
 
-    controls = parse_arguments(sys.argv[1:])
-    asyncio.run(send_controls_to_openfinch(controls))
+    if args.image:
+        # Encode the image and send it to the server
+        encoded_image = encode_image(args.image)
+        asyncio.run(send_image_to_openfinch(encoded_image))
+        # asyncio.run(send_controls_to_openfinch({"slm_image": encoded_image}))
+    else:
+        # Existing logic to send controls
+        controls = parse_arguments(sys.argv[1:])
+        print(controls)
+        asyncio.run(send_controls_to_openfinch(controls))
+
+    # controls = parse_arguments(sys.argv[1:])
+    # asyncio.run(send_controls_to_openfinch(controls))
 
 
 if __name__ == "__main__":
