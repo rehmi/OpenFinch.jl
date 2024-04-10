@@ -108,7 +108,7 @@ class CameraServer:
             logging.error(f"Failed to set color gains: {e}")
 
     async def handle_ws(self, request):
-        ws = web.WebSocketResponse()
+        ws = web.WebSocketResponse(max_msg_size=32*1024*1024)
         # self.active_connections.add(ws)
         await ws.prepare(request)
         # Initialize preferences with stream_frames set to True
@@ -167,6 +167,10 @@ class CameraServer:
 
                     except Exception as e:
                         logging.exception("CameraServer.handle_ws")
+                else:
+                    # logging.debug(f"Received non-text message of type {msg.type}: {msg.data[:100]} [{len(msg.data)} bytes total]")
+                    logging.debug(f"Received non-text message {msg}")
+
         except Exception as e:
             logging.exception("Error handling WebSocket message")
         finally:
@@ -181,7 +185,7 @@ class CameraServer:
         if ws in self.active_connections:
             del self.active_connections[ws]
         # Perform additional cleanup if necessary
-        logging.info(f"Cleaned up connection {ws}")
+        logging.info(f"Cleaned up websocket connection")
     
     async def send_str_and_bytes(self, ws, str_data, bytes_data):
         await self.message_queues[ws].put((str_data, bytes_data))
