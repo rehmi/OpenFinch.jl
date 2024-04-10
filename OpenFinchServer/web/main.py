@@ -35,15 +35,22 @@ def main():
     parser.add_argument('--delprocs', action='store_true', help='Delete all existing procs')
     parser.add_argument('--set-trigger-mode', type=int, choices=[0, 1], nargs='?', const=1, default=None, help='Set trigger mode for imx296 module (0 or 1, default: 1 if argument given without value)')
     parser.add_argument('--color-gains', type=str, help='Set color gains as a comma-separated pair (e.g., "1.5,1.2" for red and blue gains)')
+    # Add an argument for setting the logging level
+    parser.add_argument('--log-level', type=str, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO', help='Set the logging level')
 
     args = parser.parse_args()
 
     fmt = "%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s"
 
+    # Set the logging level based on the argument
+    logging_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(logging_level, int):
+        raise ValueError(f'Invalid log level: {args.log_level}')
+
     if args.log:
-        logging.basicConfig(level=logging.INFO, format=fmt)
+        logging.basicConfig(level=logging_level, format=fmt)
     elif args.log_file:
-        logging.basicConfig(level=logging.INFO, format=fmt, filename=args.log_file, filemode='w')
+        logging.basicConfig(level=logging_level, format=fmt, filename=args.log_file, filemode='w')
     else:
         # Disable logging by default
         logging.disable(logging.CRITICAL)

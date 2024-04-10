@@ -52,7 +52,7 @@ class Picamera2Controller(AbstractCameraController):
         self.picam2.start()
         self.set_capture_mode("preview")
         # picamera2 likes to log a lot of things
-        logger = logging.getLogger('picamera2.request')
+        logger = logging.getLogger('picamera2')
         logger.setLevel(logging.WARNING)
 
         self.frame_queue = queue.Queue(maxsize=1)
