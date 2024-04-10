@@ -61,8 +61,26 @@ class FramebufferDisplay(DisplayBackend):
         return width, height
 
     def display_image(self, img):
-        resized = img.resize((self.width, self.height))
-        img_rgb565 = self.convert_image_to_rgb565(resized)
+        img_width, img_height = img.size
+        # Determine whether to crop or pad
+        if img_width > self.width or img_height > self.height:
+            # Crop the image
+            left = (img_width - self.width) // 2
+            top = (img_height - self.height) // 2
+            right = (img_width + self.width) // 2
+            bottom = (img_height + self.height) // 2
+            img_cropped = img.crop((left, top, right, bottom))
+            img_final = img_cropped
+        else:
+            # Pad the image
+            img_final = Image.new("RGB", (self.width, self.height), "black")
+            left = (self.width - img_width) // 2
+            top = (self.height - img_height) // 2
+            img_final.paste(img, (left, top))
+
+        # Convert the final image to RGB565 format
+        img_rgb565 = self.convert_image_to_rgb565(img_final)
+
         self.disable_cursor()
         # Convert the byte array to a NumPy array of type uint16
         img_rgb565_np = np.frombuffer(img_rgb565, dtype=np.uint16)
