@@ -34,8 +34,10 @@ async def send_image_to_openfinch(encoded_image):
     session = aiohttp.ClientSession()
     async with session.ws_connect(f"ws://{host}:{port}/ws") as ws:
         await ws.send_json({"slm_image": encoded_image})
-        
-        time.sleep(10)
+        response = await ws.receive()
+        response = await ws.receive()
+        time.sleep(0.1)
+        response = await ws.receive()
         response = await ws.receive()
         await session.close()
 

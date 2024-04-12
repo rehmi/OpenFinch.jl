@@ -42,9 +42,15 @@ class FramebufferDisplay(DisplayBackend):
         # this is the frambuffer for video output - note that this is a 16 bit RGB
         # other setups will likely have a different format and dimensions which you can check with
         # fbset -fb /dev/fb0 
-        self.fb = self.get_mapped_framebuffer()
         self.tty = "/dev/tty1"
+        self.disable_cursor()
+        self.fb = self.get_mapped_framebuffer()
+        self.saved_fb = self.fb.copy()
 
+    def __del__(self):
+        self.fb[:] = self.saved_fb
+        self.enable_cursor()
+    
     def get_framebuffer_dimensions(self):
         """
         Retrieves the dimensions of the framebuffer.
@@ -60,6 +66,38 @@ class FramebufferDisplay(DisplayBackend):
         height = int(dimensions[2])
         return width, height
 
+    def get_mapped_framebuffer(self):
+        # this is the frambuffer for analog video output - note that this is a 16 bit RGB
+        # other setups will likely have a different format and dimensions which you can check with
+        # fbset -fb /dev/fb0 
+        return np.memmap('/dev/fb0', dtype='uint16',mode='w+', shape=(self.height, self.width))
+
+    # Function to convert PIL image to 5-6-5 RGB format using NumPy
+    def convert_image_to_rgb565(self, image):
+        # first check for 1-bit images
+        if image.mode == '1':
+            img_np = np.array(image)
+            rgb565 = img_np.astype(np.uint16) * 0xffff
+        else:
+            # Convert the image to RGB if it's not already in RGB mode
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+
+            # Convert the image to a NumPy array
+            img_np = np.array(image)
+
+            # Resize image to match your framebuffer's resolution, if necessary
+            # img_np = cv2.resize(img_np, (framebuffer_width, framebuffer_height))
+
+            # Convert pixels to 5-6-5 format
+            r = (img_np[:,:,0] >> 3).astype(np.uint16)
+            g = (img_np[:,:,1] >> 2).astype(np.uint16)
+            b = (img_np[:,:,2] >> 3).astype(np.uint16)
+            rgb565 = (r << 11) | (g << 5) | b
+
+        # return the numpy uint16 array
+        return rgb565
+
     def display_image(self, img):
         img_width, img_height = img.size
         # Determine whether to crop or pad
@@ -71,22 +109,23 @@ class FramebufferDisplay(DisplayBackend):
             bottom = (img_height + self.height) // 2
             img_cropped = img.crop((left, top, right, bottom))
             img_final = img_cropped
-        else:
+        elif img_width < self.width or img_height < self.height:
             # Pad the image
             img_final = Image.new("RGB", (self.width, self.height), "black")
             left = (self.width - img_width) // 2
             top = (self.height - img_height) // 2
             img_final.paste(img, (left, top))
+        else:
+            img_final = img
 
         # Convert the final image to RGB565 format
         img_rgb565 = self.convert_image_to_rgb565(img_final)
 
-        self.disable_cursor()
         # Convert the byte array to a NumPy array of type uint16
-        img_rgb565_np = np.frombuffer(img_rgb565, dtype=np.uint16)
+        # img_rgb565_np = np.frombuffer(img_rgb565, dtype=np.uint16)
         # Reshape the array to match the framebuffer's dimensions
         # and assign the reshaped array to the framebuffer
-        self.fb[:] =  img_rgb565_np.reshape(self.height, self.width)
+        self.fb[:] =  img_rgb565.reshape(self.height, self.width)
         # response = requests.get(image_url)
         # response.raise_for_status()
         # image_bytes = response.content
@@ -98,37 +137,10 @@ class FramebufferDisplay(DisplayBackend):
         #os.system (f"TERM=linux setterm -foreground black -clear all >{tty}")
         os.system (f"TERM=linux setterm -cursor off >{self.tty}")
 
-    def get_mapped_framebuffer(self):
-        # this is the frambuffer for analog video output - note that this is a 16 bit RGB
-        # other setups will likely have a different format and dimensions which you can check with
-        # fbset -fb /dev/fb0 
-        return np.memmap('/dev/fb0', dtype='uint16',mode='w+', shape=(self.height, self.width))
-
     def enable_cursor(self):
         # turn on the cursor again:    
         #os.system(f"TERM=linux setterm -foreground white -clear all >{tty}")
         os.system (f"TERM=linux setterm -cursor on >{self.tty}")
-
-    # Function to convert PIL image to 5-6-5 RGB format using NumPy
-    def convert_image_to_rgb565(self, image):
-        # Convert the image to RGB if it's not already in RGB mode
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-
-        # Convert the image to a NumPy array
-        img_np = np.array(image)
-
-        # Resize image to match your framebuffer's resolution, if necessary
-        # img_np = cv2.resize(img_np, (framebuffer_width, framebuffer_height))
-
-        # Convert pixels to 5-6-5 format
-        r = (img_np[:,:,0] >> 3).astype(np.uint16)
-        g = (img_np[:,:,1] >> 2).astype(np.uint16)
-        b = (img_np[:,:,2] >> 3).astype(np.uint16)
-        rgb565 = (r << 11) | (g << 5) | b
-
-        # Convert the 5-6-5 RGB array to bytes
-        return rgb565.tobytes()
 
     def display_image_url(self, image_url):
         try:
@@ -146,6 +158,7 @@ class FramebufferDisplay(DisplayBackend):
         # URL of the image
         test_image_url = "https://m.media-amazon.com/images/I/71D-PfmrvjL._AC_SL1200_.jpg"
         self.display_image_url(test_image_url)
+
 
 class WindowSystemDisplay(DisplayBackend):
     def __init__(self, window_name='SLM image', monitor_index=0):

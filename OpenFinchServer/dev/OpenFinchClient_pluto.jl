@@ -1,8 +1,18 @@
 ### A Pluto.jl notebook ###
-# v0.19.37
+# v0.19.40
 
 using Markdown
 using InteractiveUtils
+
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
 
 # ╔═╡ 68751a63-0b5c-405e-b97d-57a30d5b9f25
 begin
@@ -31,6 +41,9 @@ begin
 	end
 end
 
+# ╔═╡ d8338204-fa7e-416e-b386-22a8aed261db
+using Observables
+
 # ╔═╡ 0f31e892-29ef-43fa-be78-0d307707a3fc
 md"# OpenFinch client development"
 
@@ -39,7 +52,7 @@ PlutoUI.TableOfContents()
 
 # ╔═╡ 8a721e36-c5a1-4e38-9b8b-4f4a72dfa0c2
 begin
-	host = "finch.local"
+	host = "winch.local"
 	port = 8000
 	URI = "ws://$host:$port/ws"
 end
@@ -69,7 +82,7 @@ md"### Open/read image/close connection"
 end seconds=15 samples=100
 
 # ╔═╡ 8210eb5f-8e4e-4080-8545-8936e8fa79d1
-@time HTTP.WebSockets.open(URI) do ws
+333/(@elapsed HTTP.WebSockets.open(URI) do ws
 	req = JSON.json(Dict("image_request" => "now"))
 	global msgs = []
 	global imgs = []
@@ -82,20 +95,23 @@ end seconds=15 samples=100
 		if haskey(msg, "image_response")
 			img_bin = WebSockets.receive(ws)
 			@Threads.spawn begin
-				global img
+				# global img
 				img = load(Stream{format"JPEG"}(IOBuffer(img_bin)))
 				push!(imgs, img)
 				n -= 1
 			end
 		end
 	end
-end
+end)
 
 # ╔═╡ 6c3a0570-e146-4416-a579-3e4328fdaefc
 md"""## Collect $(length(imgs)) images
 
 Note that image decoding is done in a spawned thread to minimize impact on timing.
 """
+
+# ╔═╡ 28598845-d5dd-4563-938b-664306f7466c
+
 
 # ╔═╡ 8c314669-87f8-4e59-b321-853e590c79ee
 md"## Visualization"
@@ -119,12 +135,60 @@ HTML("""
 var host = "$host";
 var port = "$port";
 </script></body></html> 
-$(String(read(joinpath(@__DIR__, "OpenFinchServer", "dashboard.html"))))
-""")
+$(String(read(joinpath(@__DIR__, "..", "OpenFinchServer", "web", "static", "dashboard.html"))))
+""") 
 
 # ╔═╡ 9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
 # HypertextLiteral also defines @htl and @htl_str, and then there's @html_str
 # all of which have different escaping rules and conversions
+
+# ╔═╡ 38cd7809-636c-4d03-b1e3-b38badf4dfec
+md"## Image upload to OpenFinch"
+
+# ╔═╡ 24134af0-bb64-4799-b59c-d3c9a324106f
+md"First, load a test image and change its quantization"
+
+# ╔═╡ 818280c4-756a-49e0-b4ca-e31022e4fc62
+img = load("../OpenFinchServer/testchart.jpg")
+
+# ╔═╡ 73f62d97-1e58-4e7b-91cf-c38728fc8e61
+@bind threshold Slider(0.00:0.01:1.0, default=0.5)
+
+# ╔═╡ df75e55c-2431-4409-b51f-08eccb0bfe44
+Gray.(Gray.(img) .> threshold)
+
+# ╔═╡ a5454cb0-e53d-48f1-9fa1-03dd9774afc9
+md"Grab an image from the server"
+
+# ╔═╡ 48af8536-dc0b-411a-a6fc-2b04f9f2b664
+msgs
+
+# ╔═╡ 515a3923-6cae-4504-b16a-b8d37a1c1356
+# out = Observable(rand(RGB, 256,256))
+
+# ╔═╡ b8456d06-a6e4-4666-90b8-da35b262245e
+@bind t Clock()
+
+# ╔═╡ 5d442919-a3e4-4fc1-b02f-a2d6ed9f8032
+@bind running CheckBox(true)
+
+# ╔═╡ 6e3dbd49-87ed-4fe9-8cfd-0d547a915796
+out
+
+# ╔═╡ 70bbb4ea-aac3-42af-9402-18f2196e737c
+# ╠═╡ disabled = true
+#=╠═╡
+while true
+	sleep(1)
+	if running
+		global out
+		out = rand(RGB, 256, 256)
+	end
+end
+  ╠═╡ =#
+
+# ╔═╡ 8ea4148c-240c-4dee-9edd-9191afd21e6b
+t; out = rand(RGB, 256, 256);
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -138,6 +202,7 @@ Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 JpegTurbo = "b835a17e-a41a-41e7-81f0-2f016b05efe0"
 MosaicViews = "e94cdb99-869f-56ef-bcf0-1ae2bcbe0389"
+Observables = "510215fc-4207-5dde-b226-833fc4488ee2"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
@@ -153,6 +218,7 @@ Images = "~0.26.0"
 JSON = "~0.21.4"
 JpegTurbo = "~0.1.5"
 MosaicViews = "~0.3.4"
+Observables = "~0.5.5"
 Plots = "~1.39.0"
 PlutoTeachingTools = "~0.2.14"
 PlutoUI = "~0.7.55"
@@ -163,9 +229,9 @@ QuartzImageIO = "~0.7.4"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.0"
+julia_version = "1.10.2"
 manifest_format = "2.0"
-project_hash = "6ee0edb97778877693c8c0e74d1f056531935a7b"
+project_hash = "48da55414a4b47958cc1b83fcd13d21c651ca10b"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -361,7 +427,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.5+1"
+version = "1.1.0+0"
 
 [[deps.ComputationalResources]]
 git-tree-sha1 = "52cb3ec90e8a8bea0e62e275ba577ad0f74821f7"
@@ -1119,6 +1185,11 @@ version = "1.1.1"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
+[[deps.Observables]]
+git-tree-sha1 = "7438a59546cf62428fc9d1bc94729146d37a7225"
+uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
+version = "0.5.5"
+
 [[deps.OffsetArrays]]
 git-tree-sha1 = "6a731f2b5c03157418a20c12195eb4b74c8f8621"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
@@ -1137,7 +1208,7 @@ version = "1.3.5+1"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
-version = "0.3.23+2"
+version = "0.3.23+4"
 
 [[deps.OpenEXR]]
 deps = ["Colors", "FileIO", "OpenEXR_jll"]
@@ -1947,11 +2018,26 @@ version = "1.4.1+1"
 # ╠═0cfe658f-a632-46de-95e3-16330fce3033
 # ╟─6c3a0570-e146-4416-a579-3e4328fdaefc
 # ╠═8210eb5f-8e4e-4080-8545-8936e8fa79d1
+# ╠═28598845-d5dd-4563-938b-664306f7466c
 # ╟─8c314669-87f8-4e59-b321-853e590c79ee
 # ╟─7ef5dcbf-9810-409c-84f6-401a0abbd1c1
 # ╠═af651a15-43fb-4b35-ad55-424a04b53544
 # ╟─6ec24024-2d48-4226-860f-b775594fb8f3
 # ╠═16a975f8-81bf-4432-b1da-fe68f06eddfb
 # ╠═9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
+# ╟─38cd7809-636c-4d03-b1e3-b38badf4dfec
+# ╟─24134af0-bb64-4799-b59c-d3c9a324106f
+# ╠═818280c4-756a-49e0-b4ca-e31022e4fc62
+# ╠═73f62d97-1e58-4e7b-91cf-c38728fc8e61
+# ╠═df75e55c-2431-4409-b51f-08eccb0bfe44
+# ╟─a5454cb0-e53d-48f1-9fa1-03dd9774afc9
+# ╠═48af8536-dc0b-411a-a6fc-2b04f9f2b664
+# ╠═6e3dbd49-87ed-4fe9-8cfd-0d547a915796
+# ╠═515a3923-6cae-4504-b16a-b8d37a1c1356
+# ╠═d8338204-fa7e-416e-b386-22a8aed261db
+# ╠═8ea4148c-240c-4dee-9edd-9191afd21e6b
+# ╠═b8456d06-a6e4-4666-90b8-da35b262245e
+# ╠═70bbb4ea-aac3-42af-9402-18f2196e737c
+# ╠═5d442919-a3e4-4fc1-b02f-a2d6ed9f8032
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
