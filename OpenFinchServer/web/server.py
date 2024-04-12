@@ -256,7 +256,7 @@ class CameraServer:
                 await asyncio.sleep(0.001)
             except Exception as e:
                 logging.exception("Exception in periodic_task")
-                raise e
+                # raise e
 
     async def handle_update_controls(self, data):
         # Collect the current control values
@@ -356,7 +356,7 @@ class CameraServer:
                 self.persistent_metadata[key] = value
             
             # Loop through each connection and check if stream_frames is True
-            for ws, prefs in self.active_connections.items():
+            for ws, prefs in self.active_connections.copy().items():
                 if prefs.get('stream_frames', True):
                     if prefs.get('use_base64_encoding', False):
                         # Convert the image to base64
