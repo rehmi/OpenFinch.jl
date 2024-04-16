@@ -19,7 +19,9 @@ begin
 	using HTTP
 	using HTTP.WebSockets
 	using JSON
+	using Base64
 	using FileIO
+	using ImageIO
 	using BenchmarkTools
 	using JpegTurbo
 	using QuartzImageIO
@@ -41,9 +43,6 @@ begin
 	end
 end
 
-# ╔═╡ d8338204-fa7e-416e-b386-22a8aed261db
-using Observables
-
 # ╔═╡ 0f31e892-29ef-43fa-be78-0d307707a3fc
 md"# OpenFinch client development"
 
@@ -64,13 +63,18 @@ md"## Benchmarks"
 md"### Open/close connection"
 
 # ╔═╡ f423d1f0-2dfb-4e64-b936-0755169175e7
+# ╠═╡ disabled = true
+#=╠═╡
 @benchmark HTTP.WebSockets.open(URI) do ws
 end
+  ╠═╡ =#
 
 # ╔═╡ 0cb248a9-7ce5-4882-8cd1-7021dc2f5341
 md"### Open/read image/close connection"
 
 # ╔═╡ 0cfe658f-a632-46de-95e3-16330fce3033
+# ╠═╡ disabled = true
+#=╠═╡
 @benchmark HTTP.WebSockets.open(URI) do ws
     while true
 		msg = JSON.parse(WebSockets.receive(ws))
@@ -80,6 +84,7 @@ md"### Open/read image/close connection"
 		end
 	end
 end seconds=15 samples=100
+  ╠═╡ =#
 
 # ╔═╡ 8210eb5f-8e4e-4080-8545-8936e8fa79d1
 333/(@elapsed HTTP.WebSockets.open(URI) do ws
@@ -88,7 +93,7 @@ end seconds=15 samples=100
 	global imgs = []
 
 	n = 333
-	while n > 0
+	for i in 1:n
 		WebSockets.send(ws, req)
 		msg = JSON.parse(WebSockets.receive(ws))
 		push!(msgs, msg)
@@ -98,7 +103,6 @@ end seconds=15 samples=100
 				# global img
 				img = load(Stream{format"JPEG"}(IOBuffer(img_bin)))
 				push!(imgs, img)
-				n -= 1
 			end
 		end
 	end
@@ -109,9 +113,6 @@ md"""## Collect $(length(imgs)) images
 
 Note that image decoding is done in a spawned thread to minimize impact on timing.
 """
-
-# ╔═╡ 28598845-d5dd-4563-938b-664306f7466c
-
 
 # ╔═╡ 8c314669-87f8-4e59-b321-853e590c79ee
 md"## Visualization"
@@ -135,12 +136,15 @@ HTML("""
 var host = "$host";
 var port = "$port";
 </script></body></html> 
-$(String(read(joinpath(@__DIR__, "..", "OpenFinchServer", "web", "static", "dashboard.html"))))
-""") 
+$(String(read(joinpath(@__DIR__, "..", "web", "static", "dashboard.html"))))
+""")
 
 # ╔═╡ 9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
 # HypertextLiteral also defines @htl and @htl_str, and then there's @html_str
 # all of which have different escaping rules and conversions
+
+# ╔═╡ 8f32b13a-109d-4309-8853-2a8df016c417
+image_path = "../testchart.jpg"
 
 # ╔═╡ 38cd7809-636c-4d03-b1e3-b38badf4dfec
 md"## Image upload to OpenFinch"
@@ -149,60 +153,88 @@ md"## Image upload to OpenFinch"
 md"First, load a test image and change its quantization"
 
 # ╔═╡ 818280c4-756a-49e0-b4ca-e31022e4fc62
-img = load("../OpenFinchServer/testchart.jpg")
+img = load("../testchart.jpg")
 
 # ╔═╡ 73f62d97-1e58-4e7b-91cf-c38728fc8e61
 @bind threshold Slider(0.00:0.01:1.0, default=0.5)
 
 # ╔═╡ df75e55c-2431-4409-b51f-08eccb0bfe44
-Gray.(Gray.(img) .> threshold)
+imgb = Gray.(Gray.(img) .> threshold)
 
-# ╔═╡ a5454cb0-e53d-48f1-9fa1-03dd9774afc9
-md"Grab an image from the server"
+# ╔═╡ 3986aa99-dedd-4f5f-837e-9594daf8a034
+function encode_image_file_to_base64(image_path::String)
+	    open(image_path, "r") do file
+	        return base64encode(file)
+	    end
+	end
 
-# ╔═╡ 48af8536-dc0b-411a-a6fc-2b04f9f2b664
-msgs
+# ╔═╡ 040db309-15e9-48c5-aaeb-c89de46dc817
+function send_image_file_to_openfinch(image_path::String)
+	    uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
+		encoded_image = encode_image_file_to_base64(image_path)
+	    HTTP.WebSockets.open(uri) do ws
+	        image_message = JSON.json(Dict("slm_image" => encoded_image))
+	        HTTP.WebSockets.send(ws, image_message)
+	    end
+	end
 
-# ╔═╡ 515a3923-6cae-4504-b16a-b8d37a1c1356
-# out = Observable(rand(RGB, 256,256))
+# ╔═╡ e0a74c9c-df85-494a-a082-28ae6c58e161
+send_image_file_to_openfinch(image_path);
 
-# ╔═╡ b8456d06-a6e4-4666-90b8-da35b262245e
-@bind t Clock()
+# ╔═╡ 6a87f891-6804-4d4d-a80e-d04f9d354862
+function send_controls_to_openfinch(controls::Dict)
+	    uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
+	    HTTP.WebSockets.open(uri) do ws
+	        control_message = JSON.json(Dict("set_control" => controls))
+	        HTTP.WebSockets.send(ws, control_message)
+	    end
+	end
 
-# ╔═╡ 5d442919-a3e4-4fc1-b02f-a2d6ed9f8032
-@bind running CheckBox(true)
+# ╔═╡ cf035340-3251-4299-a4b5-e3f972f5caed
+send_controls_to_openfinch(Dict(
+	"LED_TIME" => 400,
+	"LED_WIDTH" => 10,
+	"ColourGains" => [1, 1],
+	"AnalogueGain" => 3,
+	# "ScalerCrop" => [3, 0, 1450, 1088]
+));
 
-# ╔═╡ 6e3dbd49-87ed-4fe9-8cfd-0d547a915796
-out
+# ╔═╡ c5ac59f5-237a-49e9-aaa2-0ca2a932c1c5
+function image_to_base64(image::Array{<:Colorant})
+	io = IOBuffer()
+	save(Stream{format"PNG"}(io), image)  # Save the image as PNG to the IOBuffer
+	seekstart(io)  # Reset the buffer's position to the beginning
+	return base64encode(io)  # Encode the buffer's content to base64
+end
 
-# ╔═╡ 70bbb4ea-aac3-42af-9402-18f2196e737c
-# ╠═╡ disabled = true
-#=╠═╡
-while true
-	sleep(1)
-	if running
-		global out
-		out = rand(RGB, 256, 256)
+# ╔═╡ d98b537f-f033-4205-9c20-efc75e61bbdc
+function send_image_to_openfinch(image::Array{<:Colorant})
+	uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
+	encoded_image = image_to_base64(image)
+	HTTP.WebSockets.open(uri) do ws
+		image_message = JSON.json(Dict("slm_image" => encoded_image))
+		HTTP.WebSockets.send(ws, image_message)
 	end
 end
-  ╠═╡ =#
 
-# ╔═╡ 8ea4148c-240c-4dee-9edd-9191afd21e6b
-t; out = rand(RGB, 256, 256);
+# ╔═╡ f63140f7-e202-4416-bea2-e72849ffc0f3
+# Now send the image instance to the server
+send_image_to_openfinch(imgb);
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+ImageIO = "82e4d734-157c-48bb-816b-45c225c6df19"
 ImageShow = "4e3cecfd-b093-5904-9786-8bbb286a6a31"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 JpegTurbo = "b835a17e-a41a-41e7-81f0-2f016b05efe0"
 MosaicViews = "e94cdb99-869f-56ef-bcf0-1ae2bcbe0389"
-Observables = "510215fc-4207-5dde-b226-833fc4488ee2"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
@@ -213,12 +245,12 @@ BenchmarkTools = "~1.4.0"
 Colors = "~0.12.10"
 FileIO = "~1.16.2"
 HTTP = "~1.10.1"
+ImageIO = "~0.6.7"
 ImageShow = "~0.3.8"
 Images = "~0.26.0"
 JSON = "~0.21.4"
 JpegTurbo = "~0.1.5"
 MosaicViews = "~0.3.4"
-Observables = "~0.5.5"
 Plots = "~1.39.0"
 PlutoTeachingTools = "~0.2.14"
 PlutoUI = "~0.7.55"
@@ -231,7 +263,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.2"
 manifest_format = "2.0"
-project_hash = "48da55414a4b47958cc1b83fcd13d21c651ca10b"
+project_hash = "cadfa9a38e0b24a15e77bb5086f29eba09ad74cc"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1185,11 +1217,6 @@ version = "1.1.1"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
-[[deps.Observables]]
-git-tree-sha1 = "7438a59546cf62428fc9d1bc94729146d37a7225"
-uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.5.5"
-
 [[deps.OffsetArrays]]
 git-tree-sha1 = "6a731f2b5c03157418a20c12195eb4b74c8f8621"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
@@ -2018,26 +2045,25 @@ version = "1.4.1+1"
 # ╠═0cfe658f-a632-46de-95e3-16330fce3033
 # ╟─6c3a0570-e146-4416-a579-3e4328fdaefc
 # ╠═8210eb5f-8e4e-4080-8545-8936e8fa79d1
-# ╠═28598845-d5dd-4563-938b-664306f7466c
 # ╟─8c314669-87f8-4e59-b321-853e590c79ee
 # ╟─7ef5dcbf-9810-409c-84f6-401a0abbd1c1
 # ╠═af651a15-43fb-4b35-ad55-424a04b53544
 # ╟─6ec24024-2d48-4226-860f-b775594fb8f3
 # ╠═16a975f8-81bf-4432-b1da-fe68f06eddfb
 # ╠═9c6a273c-a8e8-4015-b9d6-0dfe12b9543b
+# ╠═cf035340-3251-4299-a4b5-e3f972f5caed
+# ╠═8f32b13a-109d-4309-8853-2a8df016c417
+# ╠═e0a74c9c-df85-494a-a082-28ae6c58e161
+# ╠═f63140f7-e202-4416-bea2-e72849ffc0f3
+# ╠═73f62d97-1e58-4e7b-91cf-c38728fc8e61
+# ╠═df75e55c-2431-4409-b51f-08eccb0bfe44
 # ╟─38cd7809-636c-4d03-b1e3-b38badf4dfec
 # ╟─24134af0-bb64-4799-b59c-d3c9a324106f
 # ╠═818280c4-756a-49e0-b4ca-e31022e4fc62
-# ╠═73f62d97-1e58-4e7b-91cf-c38728fc8e61
-# ╠═df75e55c-2431-4409-b51f-08eccb0bfe44
-# ╟─a5454cb0-e53d-48f1-9fa1-03dd9774afc9
-# ╠═48af8536-dc0b-411a-a6fc-2b04f9f2b664
-# ╠═6e3dbd49-87ed-4fe9-8cfd-0d547a915796
-# ╠═515a3923-6cae-4504-b16a-b8d37a1c1356
-# ╠═d8338204-fa7e-416e-b386-22a8aed261db
-# ╠═8ea4148c-240c-4dee-9edd-9191afd21e6b
-# ╠═b8456d06-a6e4-4666-90b8-da35b262245e
-# ╠═70bbb4ea-aac3-42af-9402-18f2196e737c
-# ╠═5d442919-a3e4-4fc1-b02f-a2d6ed9f8032
+# ╠═3986aa99-dedd-4f5f-837e-9594daf8a034
+# ╠═040db309-15e9-48c5-aaeb-c89de46dc817
+# ╠═6a87f891-6804-4d4d-a80e-d04f9d354862
+# ╠═c5ac59f5-237a-49e9-aaa2-0ca2a932c1c5
+# ╠═d98b537f-f033-4205-9c20-efc75e61bbdc
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
