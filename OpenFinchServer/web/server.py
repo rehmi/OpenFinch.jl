@@ -123,7 +123,7 @@ class CameraServer:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
-                    logging.debug(f"Received message: {data}")  # Log the received message
+                    # logging.debug(f"Received message: {data}")  # Log the received message
                     try:
                         if 'set_control' in data:
                             for control_name, control_value in data['set_control'].items():
@@ -204,16 +204,30 @@ class CameraServer:
     async def active_connection_wrapper(self, ws):
         try:
             while True:
+                if ws.closed:
+                    logging.warning("WebSocket connection is closed. Exiting message loop.")
+                    break
                 messages = await self.message_queues[ws].get()
-                for message in messages:
-                    if isinstance(message, str):
-                        await ws.send_str(message)
-                    else:
-                        await ws.send_bytes(message)
+                if not messages:
+                    logging.debug("No messages to send. Continuing.")
+                    continue
+                send_tasks = [asyncio.create_task(ws.send_str(message) if isinstance(message, str) else ws.send_bytes(message)) for message in messages]
+                for task in asyncio.as_completed(send_tasks, timeout=10):
+                    try:
+                        await task
+                    except asyncio.TimeoutError:
+                        logging.error("Timeout while sending message.")
+                    except ConnectionResetError:
+                        logging.error("Connection reset. Unable to send message.")
+                        break  # Exit the loop if the connection is reset
+                    except Exception as e:
+                        logging.exception(f"Unexpected error while sending message: {e}")
         except Exception as e:
-            pass
-            # logging.exception(f"active_connection_wrapper: error on WebSocket")
+            logging.exception(f"An unexpected error occurred outside the message sending loop: {e}")
         finally:
+            await self.cleanup_connection(ws)
+            logging.info("Connection cleanup completed.")
+            
             # Attempt to gracefully close the connection
             try:
                 logging.info("Waiting for remaining messages to be sent before closing websocket.")
