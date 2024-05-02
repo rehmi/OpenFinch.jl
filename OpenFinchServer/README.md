@@ -58,9 +58,8 @@ Modify settings in `camera/models/IMX296.py` and `camera/models/OV2311.py` as ne
 ```bash
 python web/main.py
 ```
-### Modify `udev` rules to allow changing IMX296 trigger mode
 
-### Modifying Sysfs File Permissions for the IMX296 Module
+### Modify `udev` rules to allow changing IMX296 trigger mode
 
 By following these instructions, you can modify the `trigger_mode` file permissions of the IMX296 module, allowing user programs to write values to it without needing root access. This concise guide will walk you through setting up a `udev` rule to allow non-root users to write to the `trigger_mode` parameter of the IMX296 module.
 
@@ -106,7 +105,30 @@ By following these instructions, you can modify the `trigger_mode` file permissi
 
 Navigate to `http://localhost:8000` to access the web interface for camera configuration and image viewing.
 
-For API details and WebSocket communication, see the `web/server.py` file.
+For an example of using the server's WebSocket API, see and `web/finchcontrol.py`.
+
+## Troubleshooting
+
+### Modify libcamera configuration to avoid canera timeouts
+
+You may see the server stall if the camera frontend times out, in which case it will log an error like this:
+
+
+```
+ WARN V4L2 v4l2_videodevice.cpp:2007 /dev/video0[15:cap]: Dequeue timer of 1000000.00us has expired!
+ERROR RPI pipeline_base.cpp:1333 Camera frontend has timed out!
+ERROR RPI pipeline_base.cpp:1334 Please check that your camera sensor connector is attached securely.
+ERROR RPI pipeline_base.cpp:1335 Alternatively, try another cable and/or sensor.
+```
+
+This error is occurs in `libcamera`, which is called by `picamera2`, and as of this writing t's not clear that `picamera2` clients can catch and recover from this error.
+
+However, the timeout value can be increased as in [#748](https://github.com/raspberrypi/picamera2/issues/748#issuecomment-1641845674). Edit `/usr/share/libcamera/pipeline/rpi/vc4/rpi_apps.yaml` and add a line like this:
+
+```
+   # set the dequeue timeout to 10 s
+   "camera_timeout_value_ms": 10000,
+```
 
 ## Contributing
 
