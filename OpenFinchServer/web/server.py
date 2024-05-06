@@ -109,10 +109,13 @@ class CameraServer:
 
     async def handle_ws(self, request):
         ws = web.WebSocketResponse(max_msg_size=32*1024*1024)
-        # self.active_connections.add(ws)
         await ws.prepare(request)
-        # Initialize preferences with stream_frames set to True
-        self.active_connections[ws] = {'stream_frames': True}
+        # Initialize preferences
+        self.active_connections[ws] = {
+            'stream_frames': False,
+            "use_base64_encoding" : True,
+            'send_fps_updates': False
+        }
         logging.debug(f"WebSocket connection established: {ws}")
 
         # Start the active_connection_wrapper task for this connection
@@ -123,52 +126,8 @@ class CameraServer:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
-                    # logging.debug(f"Received message: {data}")  # Log the received message
-                    try:
-                        if 'set_control' in data:
-                            for control_name, control_value in data['set_control'].items():
-                                if control_name == 'slm_image_url':
-                                    await self.handle_display_image_url(control_value)
-                                else:
-                                    await self.set_control(control_name, control_value)
-                        
-                        for key, handler in self.handlers.items():
-                            if key in data:
-                                await handler(data[key])
-
-                        if 'stream_frames' in data:
-                            await self.handle_stream_frames(ws, data['stream_frames'])
-                            
-                        if 'use_base64_encoding' in data:
-                            await self.handle_use_base64_encoding(ws, data['use_base64_encoding'])
-
-                        if 'image_request' in data:
-                            await self.handle_image_request(data, ws)
-
-                        # Check for the slm_image_url command
-                        if 'slm_image_url' in data:
-                            await self.handle_display_image_url(data['slm_image_url'])
-
-                        if 'slm_image' in data:
-                            encoded_image = data['slm_image']
-                            logging.info(f"SLM_image received {len(encoded_image)} bytes")
-
-                            if encoded_image == 'next':
-                                image_blob = await ws.receive_bytes()
-                                img = Image.open(BytesIO(image_blob))
-                                # self.display.move_to_monitor(self.monitor_index)
-                            else:
-                                # Decode the base64 image and display it
-                                image_bytes = base64.b64decode(encoded_image)
-                                img = Image.open(BytesIO(image_bytes))
-                            
-                            logging.info(f"img has type {type(img)} and size {img.size}")
-                            self.display.display_image(img)
-
-                    except Exception as e:
-                        logging.exception("CameraServer.handle_ws")
+                    await self.parse_message(data, ws)
                 else:
-                    # logging.debug(f"Received non-text message of type {msg.type}: {msg.data[:100]} [{len(msg.data)} bytes total]")
                     logging.debug(f"Received non-text message {msg}")
 
         except Exception as e:
@@ -177,80 +136,71 @@ class CameraServer:
             # the websocket has closed or an error occurred.
             logging.debug(f"WebSocket connection closed: {ws}")
             await self.cleanup_connection(ws)                   
-            # self.active_connections.remove(ws)
             if ws in self.active_connections:
                 del self.active_connections[ws]
-    
+
     async def cleanup_connection(self, ws):
         if ws in self.active_connections:
             del self.active_connections[ws]
         # Perform additional cleanup if necessary
         logging.info(f"Cleaned up websocket connection")
     
-    async def send_str_and_bytes(self, ws, str_data, bytes_data):
-        await self.message_queues[ws].put((str_data, bytes_data))
-
-    async def send_str(self, ws, str_data):
-        try:
-            if ws.closed:
-                logging.warning(f"Attempt to send data to closed connection {ws}")
-                await self.cleanup_connection(ws)
-            else:
-                await ws.send_str(str_data)
-        except Exception as e:
-            logging.exception(f"Failed to send data to {ws}")
-            await self.cleanup_connection(ws)
-    
     async def active_connection_wrapper(self, ws):
         try:
-            while True:
-                if ws.closed:
-                    logging.warning("WebSocket connection is closed. Exiting message loop.")
-                    break
+            while not ws.closed:
                 messages = await self.message_queues[ws].get()
                 if not messages:
                     logging.debug("No messages to send. Continuing.")
                     continue
-                send_tasks = [asyncio.create_task(ws.send_str(message) if isinstance(message, str) else ws.send_bytes(message)) for message in messages]
-                for task in asyncio.as_completed(send_tasks, timeout=10):
-                    try:
-                        await task
-                    except asyncio.TimeoutError:
-                        logging.error("Timeout while sending message.")
-                    except ConnectionResetError:
-                        logging.error("Connection reset. Unable to send message.")
-                        break  # Exit the loop if the connection is reset
-                    except Exception as e:
-                        logging.exception(f"Unexpected error while sending message: {e}")
+
+                await self.send_messages(ws, messages)
+
         except Exception as e:
             logging.exception(f"An unexpected error occurred outside the message sending loop: {e}")
         finally:
             await self.cleanup_connection(ws)
             logging.info("Connection cleanup completed.")
-            
-            # Attempt to gracefully close the connection
+            await self.gracefully_close_connection(ws)
+
+    async def send_messages(self, ws, messages):
+        send_tasks = [asyncio.create_task(self.send_message(ws, message)) for message in messages]
+        for task in asyncio.as_completed(send_tasks, timeout=10):
             try:
-                logging.info("Waiting for remaining messages to be sent before closing websocket.")
-                # Wait for any remaining messages to be sent
-                while not self.message_queues[ws].empty():
-                    messages = await self.message_queues[ws].get()
-                    for message in messages:
-                        if isinstance(message, str):
-                            await ws.send_str(message)
-                        else:
-                            await ws.send_bytes(message)
-                # Close the WebSocket connection
-                logging.info("Remaining messages have been sent, closing websocket")
-                await ws.close()
-                logging.info("WebSocket connection closed gracefully.")
+                await task
+            except asyncio.TimeoutError:
+                logging.error("Timeout while sending message.")
+            except ConnectionResetError:
+                logging.error("Connection reset. Unable to send message.")
+                break  # Exit the loop if the connection is reset
             except Exception as e:
-                logging.exception("Error while trying to gracefully close WebSocket connection.")
-            finally:
-                # Clean up the connection and message queue
-                if ws in self.active_connections:
-                    del self.active_connections[ws]
-                if ws in self.message_queues:
-                    del self.message_queues[ws]
+                logging.exception(f"Unexpected error while sending message: {e}")
+
+    async def send_message(self, ws, message):
+        if isinstance(message, str):
+            await ws.send_str(message)
+        else:
+            await ws.send_bytes(message)
+
+    async def gracefully_close_connection(self, ws):
+        try:
+            logging.info("Waiting for remaining messages to be sent before closing websocket.")
+            # Wait for any remaining messages to be sent
+            while not self.message_queues[ws].empty():
+                messages = await self.message_queues[ws].get()
+                await self.send_messages(ws, messages)
+
+            # Close the WebSocket connection
+            logging.info("Remaining messages have been sent, closing websocket")
+            await ws.close()
+            logging.info("WebSocket connection closed gracefully.")
+        except Exception as e:
+            logging.exception("Error while trying to gracefully close WebSocket connection.")
+        finally:
+            # Clean up the connection and message queue
+            if ws in self.active_connections:
+                del self.active_connections[ws]
+            if ws in self.message_queues:
+                del self.message_queues[ws]
 
     async def broadcast_to_active_connections(self, func, *args):	
         tasks = [
@@ -272,6 +222,67 @@ class CameraServer:
                 logging.exception("Exception in periodic_task")
                 # raise e
 
+    async def send_str_and_bytes(self, ws, str_data, bytes_data):
+        await self.message_queues[ws].put((str_data, bytes_data))
+
+    async def send_str(self, ws, str_data):
+        try:
+            if ws.closed:
+                logging.warning(f"Attempt to send data to closed connection {ws}")
+                await self.cleanup_connection(ws)
+            else:
+                await ws.send_str(str_data)
+        except Exception as e:
+            logging.exception(f"Failed to send data to {ws}")
+            await self.cleanup_connection(ws)
+
+    async def parse_message(self, data, ws):
+        try:
+            if 'set_control' in data:
+                for control_name, control_value in data['set_control'].items():
+                    if control_name == 'slm_image_url':
+                        await self.handle_display_image_url(control_value)
+                    else:
+                        await self.set_control(control_name, control_value)
+            
+            for key, handler in self.handlers.items():
+                if key in data:
+                    await handler(data[key])
+
+            if 'send_fps_updates' in data:
+                await self.handle_fps_updates(ws, data['send_fps_updates'])
+
+            if 'stream_frames' in data:
+                await self.handle_stream_frames(ws, data['stream_frames'])
+                
+            if 'use_base64_encoding' in data:
+                await self.handle_use_base64_encoding(ws, data['use_base64_encoding'])
+
+            if 'image_request' in data:
+                await self.handle_image_request(data, ws)
+
+            # Check for the slm_image_url command
+            if 'slm_image_url' in data:
+                await self.handle_display_image_url(data['slm_image_url'])
+
+            if 'slm_image' in data:
+                encoded_image = data['slm_image']
+                logging.info(f"SLM_image received {len(encoded_image)} bytes")
+
+                if encoded_image == 'next':
+                    image_blob = await ws.receive_bytes()
+                    img = Image.open(BytesIO(image_blob))
+                else:
+                    # Decode the base64 image and display it
+                    image_bytes = base64.b64decode(encoded_image)
+                    img = Image.open(BytesIO(image_bytes))
+                
+                logging.info(f"img has type {type(img)} and size {img.size}")
+                self.display.display_image(img)
+
+        except Exception as e:
+            logging.exception("CameraServer.parse_message")
+        
     async def handle_update_controls(self, data):
         # Collect the current control values
         control_values = {control.name: self._get_control(control.name) for control in self.camctrl.get_control_descriptors().values()}
@@ -400,24 +411,33 @@ class CameraServer:
         if hasattr(self, 'last_fps_update_time') and current_time - self.last_fps_update_time < 1:
             # If less than 1 second has passed since the last update, do not send another update
             return
+        self.last_fps_update_time = current_time  # Update the last FPS update time
         try:
             fps_data = {
                 'image_capture_reader_fps': self.sysctrl.get_reader_fps(),
                 'image_capture_capture_fps': self.sysctrl.get_capture_fps(),
                 'system_controller_fps': self.sysctrl.get_controller_fps()
             }
-            await self.broadcast_to_active_connections(
-                self.send_str, json.dumps({'fps_update': fps_data})
-            )
-            self.last_fps_update_time = current_time  # Update the last FPS update time
+            # await self.broadcast_to_active_connections(
+            #     self.send_str, json.dumps({'fps_update': fps_data})
+            # )
+            for ws in list(self.active_connections):
+                if self.active_connections[ws].get('send_fps_updates', False):
+                    await ws.send_str(json.dumps({'fps_update': fps_data}))
         except Exception as e:
             logging.exception("Exception in send_fps_update")
 
+    async def handle_fps_updates(self, ws, preference_data):
+        self.active_connections[ws]['send_fps_updates'] = preference_data.get('value', False)
+        logging.info(f"FPS updates {'enabled' if self.active_connections[ws]['send_fps_updates'] else 'disabled'} for {ws}")
+    
     async def handle_stream_frames(self, ws, preference_data):
         self.active_connections[ws]['stream_frames'] = preference_data.get('value', True)
+        logging.info(f"Frame streaming {'enabled' if self.active_connections[ws]['stream_frames'] else 'disabled'} for {ws}")
 
     async def handle_use_base64_encoding(self, ws, preference_data):
         self.active_connections[ws]['use_base64_encoding'] = preference_data.get('value', True)
+        logging.info(f"base64 encoding {'enabled' if self.active_connections[ws]['use_base64_encoding'] else 'disabled'} for {ws}")
 
     async def handle_camera_control(self, control_name, control_data):
         # Look up the control descriptor by name

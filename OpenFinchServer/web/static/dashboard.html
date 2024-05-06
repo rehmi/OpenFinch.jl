@@ -310,8 +310,13 @@
 	</div>
 
 	<div>
-		<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" unchecked>
+		<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" checked>
 		<label for="use_base64_encoding">Use base64 encoding</label>
+	</div>
+
+	<div>
+		<input type="checkbox" id="send_fps_updates" name="send_fps_updates" checked>
+		<label for="send_fps_updates">Send FPS updates</label>
 	</div>
 
 	<div id="fullscreen-display-section">
@@ -567,6 +572,11 @@
 			ws.send(JSON.stringify({ 'use_base64_encoding': { 'value': this.checked } }));
 		});
 
+		document.getElementById('send_fps_updates').addEventListener('change', function () {
+			// Send the preference to the server using the websocket connection
+			ws.send(JSON.stringify({ 'send_fps_updates': { 'value': this.checked } }));
+		});
+	
 		Array.from(document.querySelectorAll('input[type=range]')).forEach(function (slider) {
 			slider.addEventListener('input', function () {
 				var sliderId = this.id;

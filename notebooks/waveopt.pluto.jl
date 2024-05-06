@@ -88,12 +88,152 @@ begin
 	"""
 end
 
+# ╔═╡ 640c5c2e-a463-4041-a6a5-867cf9a4dd1c
+enable_TOC ? TableOfContents() : nothing
+
 # ╔═╡ 92b03dd1-0466-48ec-84e5-f3c05251ae8f
 begin
 	host = "winch.local"
 	port = 8000
 	URI = "ws://$host:$port/ws"
 end
+
+# ╔═╡ 328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
+begin
+    function start_openfinch_communication(URI)
+        send_channel = Channel{Dict}(10)  # Channel for sending messages
+        receive_channel = Channel{Dict}(10)  # Channel for received messages
+
+		length(ch::Channel) = ch.n_avail_items
+		capacity(ch::Channel) = ch.sz_max
+
+        # Start a task to handle sending messages asynchronously
+        send_task = @async begin
+            HTTP.WebSockets.open(URI) do ws
+                while true
+					if isready(send_channel)  # Continue as long as there are messages to send
+						message = take!(send_channel)
+						jsmessage = JSON.json(message)
+						HTTP.WebSockets.send(ws, jsmessage)
+					end
+                    sleep(0.01)  # Prevent tight loop from consuming too much CPU
+                end
+            end
+        end
+
+        # Start a separate task to handle receiving messages asynchronously
+        receive_task = @async begin
+            HTTP.WebSockets.open(URI) do ws
+				while true
+					try
+                    	received_msg = HTTP.WebSockets.receive(ws)
+					catch e
+						@warn "WebSocket has been closed."
+						break
+					end
+					try
+                        parsed_msg = JSON.parse(received_msg)
+						if length(receive_channel) < capacity(receive_channel)
+							put!(receive_channel, parsed_msg)
+						else
+							@warn "Receive channel is full, dropping oldest message"
+							take!(receive_channel)
+							put!(receive_channel, parsed_msg)
+						end
+					catch e
+						@warn "Failed to parse received message"
+					end
+					sleep(0.01)  # Prevent tight loop from consuming too much CPU
+				end
+            end
+        end
+
+        return send_channel, receive_channel, send_task, receive_task
+    end
+
+	function send_controls(channel::Channel{Dict}, controls::Dict)
+	    put!(channel, Dict("set_control" => controls))  # Non-blocking put to the channel
+	end
+
+	function encode_image_file_to_base64(image_path::String)
+	    open(image_path, "r") do file
+	        return base64encode(file)
+	    end
+	end
+
+	# function send_image_file_to_openfinch(image_path::String)
+	#     uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
+	# 	encoded_image = encode_image_file_to_base64(image_path)
+	#     HTTP.WebSockets.open(uri) do ws
+	#         image_message = JSON.json(Dict("slm_image" => encoded_image))
+	#         HTTP.WebSockets.send(ws, image_message)
+	#     end
+	# end
+
+	# function send_controls_to_openfinch(controls::Dict)
+	#     uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
+	#     HTTP.WebSockets.open(uri) do ws
+	#         control_message = JSON.json(Dict("set_control" => controls))
+	#         HTTP.WebSockets.send(ws, control_message)
+	#     end
+	# end
+
+	function image_to_base64(image::Array{<:Colorant})
+		io = IOBuffer()
+		save(Stream{format"PNG"}(io), image)  # Save the image as PNG to the IOBuffer
+		seekstart(io)  # Reset the buffer's position to the beginning
+		return base64encode(io)  # Encode the buffer's content to base64
+	end
+
+	# function send_image_to_openfinch(image::Array{<:Colorant})
+	# 	uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
+	# 	encoded_image = image_to_base64(image)
+	# 	HTTP.WebSockets.open(uri) do ws
+	# 		image_message = JSON.json(Dict("slm_image" => encoded_image))
+	# 		HTTP.WebSockets.send(ws, image_message)
+	# 	end
+	# end
+
+	function send_image(channel, image::Array{<:Colorant})
+		encoded_image = image_to_base64(image)
+		put!(channel, Dict("slm_image" => encoded_image))
+	end
+
+	md"""
+	## API for OpenFinch server
+	"""
+end
+
+# ╔═╡ 829e9956-f198-46db-b98f-cdb9e0e57536
+@bind clock Clock(1)
+
+# ╔═╡ c5f1fb76-fe61-466a-aec4-23331b0887a9
+openfinch, received, send_task, recv_task = start_openfinch_communication(URI)
+
+# ╔═╡ b7d39600-c5cb-46e8-9e7d-3eba60a38fa6
+clock, recv_task, received #, received.n_avail_items > 0 ? take!(received) : nothing
+
+# ╔═╡ 8470f836-8610-4bde-9f52-dcf1ab657bec
+received
+
+# ╔═╡ b35bd476-a6d7-4ae4-8142-6e0ded4f7857
+recv_task
+
+# ╔═╡ fa93288a-4a6a-46c4-aa47-201fed444dfe
+send_task
+
+# ╔═╡ b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
+send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
+
+# ╔═╡ 9e994b57-876a-43da-b479-519737dda20b
+# ╠═╡ skip_as_script = true
+#=╠═╡
+put!(openfinch, Dict(
+	"use_base64_encoding"=>Dict("value"=>true),
+	"send_fps_updates"=>Dict("value"=>true),
+	"stream_frames"=>Dict("value"=>false),
+))
+  ╠═╡ =#
 
 # ╔═╡ 4f761eb7-0428-4ace-bd52-c1e30f169e5a
 begin
@@ -116,6 +256,11 @@ begin
 		<div>
 			<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" unchecked>
 			<label for="use_base64_encoding">Use base64 encoding</label>
+		</div>
+	
+		<div>
+			<input type="checkbox" id="send_fps_updates" name="send_fps_updates" checked>
+			<label for="send_fps_updates">Send FPS updates</label>
 		</div>
 	
 		<p>
@@ -212,11 +357,30 @@ begin
 				// Send the preference to the server using the websocket connection
 				ws.send(JSON.stringify({ 'stream_frames': { 'value': this.checked } }));
 			});
-	
+
 			document.getElementById('use_base64_encoding').addEventListener('change', function () {
 				// Send the preference to the server using the websocket connection
 				ws.send(JSON.stringify({ 'use_base64_encoding': { 'value': this.checked } }));
 			});
+	
+			document.getElementById('send_fps_updates').addEventListener('change', function () {
+				// Send the preference to the server using the websocket connection
+				ws.send(JSON.stringify({ 'send_fps_updates': { 'value': this.checked } }));
+			});
+
+			function sendInitialControlStates(controlIds) {
+		        controlIds.forEach(id => {
+		            const controlElement = document.getElementById(id);
+		            if (controlElement) {
+		                const controlValue = controlElement.type === 'checkbox' ? controlElement.checked : controlElement.value;
+		                ws.send(JSON.stringify({
+		                    'set_control': {
+		                        [id]: controlValue
+		                    }
+		                }));
+		            }
+		        });
+	    	}
 		</script>
 	</body>
 	
@@ -231,43 +395,6 @@ begin
 	Note that `HypertextLiteral` also defines `@htl` and `@htl_str`, and then there's `@html_str`, all of which have different escaping rules and conversions
 	"""
 end
-
-# ╔═╡ 328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
-function start_openfinch_communication(URI)
-    channel = Channel{Dict}(10)  # Create a channel that can hold up to 10 messages
-
-    # Start a task to handle sending messages asynchronously
-    task = @async begin
-		while isopen(channel)
-			# println("opening websocket")
-			HTTP.WebSockets.open(URI) do ws
-				while isopen(channel)
-					controls = take!(channel)  # This will block until there's a message
-					control_message = JSON.json(Dict("set_control" => controls))
-					# println("Sending control message: ", control_message)  # Print the control message
-					result = HTTP.WebSockets.send(ws, control_message)
-					# println("Result of send: ", result)  # Print the result of send
-				end
-			end
-		end
-    end
-
-    return channel, task
-end
-
-# ╔═╡ 8be48613-f2a4-4dbe-9b03-86a3b1522249
-function send_controls(channel::Channel{Dict}, controls::Dict)
-    put!(channel, controls)  # Non-blocking put to the channel
-end
-
-# ╔═╡ c5f1fb76-fe61-466a-aec4-23331b0887a9
-openfinch, task = start_openfinch_communication(URI)
-
-# ╔═╡ bf0c6d50-2999-4c4b-86ca-e973002bdd6b
-openfinch, task
-
-# ╔═╡ b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
-send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 20))
 
 # ╔═╡ a3eeaff1-1f98-4b9e-ace9-2d3a5c0110bf
 HTML("""
@@ -287,7 +414,7 @@ md"""
 | analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
 | LED width | $(@bind LED_WIDTH Slider(0:1:200, default=16, show_value=true)) |
 | LED time | $(@bind LED_TIME Slider(0:1:3000, default=000, show_value=true)) |
-| Image scaling factor | $(@bind image_scale Slider(0.125:0.125:4, default=2, show_value=true)) |
+| Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
 """
 
 # ╔═╡ 35cbfad7-825d-4961-b24d-56f8cb70a513
@@ -299,8 +426,17 @@ send_controls(openfinch, Dict(
 	"ScalerCrop" => [3, 0, 1456, 1088] # [384, 0, 1024, 768]
 ));
 
+# ╔═╡ 57e9ca9d-9427-40bd-8945-3c9f64dd600a
+send_image(openfinch, imresize(testimage("resolution_test_512"), ratio=image_scale));
+
 # ╔═╡ 2f5afb7c-8b1c-4592-bf2a-4259030a1009
 testimage("resolution_test_512")
+
+# ╔═╡ 54e4d041-0476-48d6-974d-7b0820a6f1ed
+# ╠═╡ disabled = true
+#=╠═╡
+send_image(openfinch, test_image);
+  ╠═╡ =#
 
 # ╔═╡ e44a420c-7355-46a9-a87b-754bb15c6483
 image_names = [
@@ -348,6 +484,65 @@ Diffraction slice side length: $(@bind propL Slider(0.1:0.1:5.0, default=1, show
 
 Propagation distance: $(@bind propdist Slider(0.0:0.1:1000.0, default=10.0, show_value=true)) mm
 """
+
+# ╔═╡ fae6711e-650c-48e9-86cd-8444b4adcde9
+#=╠═╡
+vγ = mosaicview(RGB.(γ_cshots[(1:Int(floor(sqrt(length(cshots))))).^2]), ncol=4, rowmajor=true)
+  ╠═╡ =#
+
+# ╔═╡ 344b90cf-2eac-4c98-b3c3-7d72b743fb29
+#=╠═╡
+plot([HSV(cshots[end]) HSV(γ_cshots[end])], size=(2N, N))
+  ╠═╡ =#
+
+# ╔═╡ fa530546-233a-42fc-a8c2-7d41a2ceff89
+#=╠═╡
+cshots = cumsum(abs2.(shots))
+  ╠═╡ =#
+
+# ╔═╡ ec6f05d6-cef8-449b-8020-40a9621b0b89
+#=╠═╡
+γ_cshots = cumsum(γ_shots)
+  ╠═╡ =#
+
+# ╔═╡ 8c98fed2-7f04-4ded-95cd-4f957deb8581
+#=╠═╡
+[ cshots[end] γ_cshots[end] ]
+  ╠═╡ =#
+
+# ╔═╡ 431fff7c-8a82-4197-8e7d-11a74fd271f8
+#=╠═╡
+γ_shots = γ_sample.(shots)
+  ╠═╡ =#
+
+# ╔═╡ 3c9e67b8-a232-4d47-a04c-57a76f4b2afb
+#=╠═╡
+γ_sample(shots[1])
+  ╠═╡ =#
+
+# ╔═╡ f54518c6-f215-4438-a1e6-81c93e9cca4f
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+begin
+	# showfield(x) = ComplexToHSV(x)
+	# showfield(x::LightField) = x
+	# showfield(x::PhasorField) = x
+	
+	initial = test_lf
+	L       = 1mm * propL
+	s 		= 1mm
+	dist 	= s *propdist
+	shots 	= []
+	@progress for i ∈ 1:256
+		# forward = normalize(propTF(initial, L, λ, scale*propdist))
+		forward  = propagate(randomizephase(initial), dist, L; prop=propfn)
+		# backward = normalize((propTF(forward, L, λ, -scale*propdist)))
+		backward = propagate((forward), -dist, L; prop=propfn)
+		push!(shots, backward)
+	end
+end
+  ╠═╡ =#
 
 # ╔═╡ 81f6131a-84f5-42b9-af6a-5eb35e459efe
 # let
@@ -553,61 +748,6 @@ md"""
 ---
 # Definitions
 """
-
-# ╔═╡ 54260849-84ea-4416-9525-f36f16282d45
-md"""
-### API for OpenFinch server
-"""
-
-# ╔═╡ 8ba5e929-38ff-4535-b36a-b2fb886ca5c0
-function encode_image_file_to_base64(image_path::String)
-	    open(image_path, "r") do file
-	        return base64encode(file)
-	    end
-	end
-
-# ╔═╡ 06bb4896-bd0e-49fa-bcbc-d2f0d94d6970
-function send_image_file_to_openfinch(image_path::String)
-	    uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
-		encoded_image = encode_image_file_to_base64(image_path)
-	    HTTP.WebSockets.open(uri) do ws
-	        image_message = JSON.json(Dict("slm_image" => encoded_image))
-	        HTTP.WebSockets.send(ws, image_message)
-	    end
-	end
-
-# ╔═╡ 0f819356-e4ee-4c78-b9c5-c33c2011ae7d
-function send_controls_to_openfinch(controls::Dict)
-	    uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
-	    HTTP.WebSockets.open(uri) do ws
-	        control_message = JSON.json(Dict("set_control" => controls))
-	        HTTP.WebSockets.send(ws, control_message)
-	    end
-	end
-
-# ╔═╡ da1de970-7eb7-47bc-8c91-5b1a3282504f
-function image_to_base64(image::Array{<:Colorant})
-	io = IOBuffer()
-	save(Stream{format"PNG"}(io), image)  # Save the image as PNG to the IOBuffer
-	seekstart(io)  # Reset the buffer's position to the beginning
-	return base64encode(io)  # Encode the buffer's content to base64
-end
-
-# ╔═╡ 08699372-e37d-49af-928c-d6d72823f633
-function send_image_to_openfinch(image::Array{<:Colorant})
-	uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
-	encoded_image = image_to_base64(image)
-	HTTP.WebSockets.open(uri) do ws
-		image_message = JSON.json(Dict("slm_image" => encoded_image))
-		HTTP.WebSockets.send(ws, image_message)
-	end
-end
-
-# ╔═╡ 57e9ca9d-9427-40bd-8945-3c9f64dd600a
-send_image_to_openfinch(imresize(testimage("resolution_test_512"), ratio=image_scale));
-
-# ╔═╡ 54e4d041-0476-48d6-974d-7b0820a6f1ed
-send_image_to_openfinch(test_image);
 
 # ╔═╡ bb9a52ae-8929-4656-a985-15bad69216f8
 md"""
@@ -1353,6 +1493,20 @@ begin
 	md"## Conversion of RGB and ``M\times{N}\times{3}`` arrays"
 end
 
+# ╔═╡ b6dfbf4a-148f-43d6-96b8-52da7802b4af
+begin
+	# p = plot([])
+	anim = @animate for i ∈ 1:length(cshots)
+		plot([HSV(γ_cshots[i]) HSV(cshots[i])], legend=false, xaxis=false, yaxis=false, xticks=false, yticks=false, size=(2N,N))
+		annotate!((0,0, (repr(i), :white, :top, :left)))
+		# HSV(cshots[i])
+	end
+	ganim = gif(anim)
+end;
+
+# ╔═╡ 5c00adf5-7148-4a31-b667-28ce74105cb1
+ganim
+
 # ╔═╡ bc851704-6b05-4398-8152-2955fed0a704
 begin
 	PhasorField([0])
@@ -1481,82 +1635,6 @@ let
 	| | pixel pitch: $(uconvert(u"µm", propL*1mm/N)) | |
 	"""
 end
-
-# ╔═╡ f54518c6-f215-4438-a1e6-81c93e9cca4f
-# ╠═╡ skip_as_script = true
-#=╠═╡
-begin
-	# showfield(x) = ComplexToHSV(x)
-	# showfield(x::LightField) = x
-	# showfield(x::PhasorField) = x
-	
-	initial = test_lf
-	L       = 1mm * propL
-	s 		= 1mm
-	dist 	= s *propdist
-	shots 	= []
-	@progress for i ∈ 1:256
-		# forward = normalize(propTF(initial, L, λ, scale*propdist))
-		forward  = propagate(randomizephase(initial), dist, L; prop=propfn)
-		# backward = normalize((propTF(forward, L, λ, -scale*propdist)))
-		backward = propagate((forward), -dist, L; prop=propfn)
-		push!(shots, backward)
-	end
-end
-  ╠═╡ =#
-
-# ╔═╡ fa530546-233a-42fc-a8c2-7d41a2ceff89
-#=╠═╡
-cshots = cumsum(abs2.(shots))
-  ╠═╡ =#
-
-# ╔═╡ 431fff7c-8a82-4197-8e7d-11a74fd271f8
-#=╠═╡
-γ_shots = γ_sample.(shots)
-  ╠═╡ =#
-
-# ╔═╡ ec6f05d6-cef8-449b-8020-40a9621b0b89
-#=╠═╡
-γ_cshots = cumsum(γ_shots)
-  ╠═╡ =#
-
-# ╔═╡ fae6711e-650c-48e9-86cd-8444b4adcde9
-#=╠═╡
-vγ = mosaicview(RGB.(γ_cshots[(1:Int(floor(sqrt(length(cshots))))).^2]), ncol=4, rowmajor=true)
-  ╠═╡ =#
-
-# ╔═╡ b6dfbf4a-148f-43d6-96b8-52da7802b4af
-#=╠═╡
-begin
-	# p = plot([])
-	anim = @animate for i ∈ 1:length(cshots)
-		plot([HSV(γ_cshots[i]) HSV(cshots[i])], legend=false, xaxis=false, yaxis=false, xticks=false, yticks=false, size=(2N,N))
-		annotate!((0,0, (repr(i), :white, :top, :left)))
-		# HSV(cshots[i])
-	end
-	ganim = gif(anim)
-end;
-  ╠═╡ =#
-
-# ╔═╡ 5c00adf5-7148-4a31-b667-28ce74105cb1
-#=╠═╡
-ganim
-  ╠═╡ =#
-
-# ╔═╡ 344b90cf-2eac-4c98-b3c3-7d72b743fb29
-#=╠═╡
-plot([HSV(cshots[end]) HSV(γ_cshots[end])], size=(2N, N))
-  ╠═╡ =#
-
-# ╔═╡ 8c98fed2-7f04-4ded-95cd-4f957deb8581
-#=╠═╡
-[ cshots[end] γ_cshots[end] ]
-  ╠═╡ =#
-
-# ╔═╡ 3c9e67b8-a232-4d47-a04c-57a76f4b2afb
-#=╠═╡
-γ_sample(shots[1])
-  ╠═╡ =#
 
 # ╔═╡ bc55d354-8ee0-4fe1-92b7-967cdb51dc2e
 begin
@@ -2231,7 +2309,9 @@ begin
 	iy = ix
 	mx,my = meshgrid(ix,iy)
 
-	surface(ix, iy, z.(mx,my,g), seriescolor=:rainbow, zaxis=:log10)
+	# surface(ix, iy, z.(mx,my,g), seriescolor=:rainbow, zaxis=:log10)
+	surface(ix, iy, log10.(z.(mx,my,g)), seriescolor=:rainbow)
+	# plot!(zaxis=(:log10,))
 end
 
 # ╔═╡ bf8befeb-0a82-4722-b76a-f912cead0e7d
@@ -2350,12 +2430,14 @@ x = 0a + a'
 y = a + 0a'
 
 # ╔═╡ b5dfef37-0aaf-4fd1-8c4e-f629216a6f27
+# ╠═╡ disabled = true
 # ╠═╡ skip_as_script = true
 #=╠═╡
 @benchmark fc()
   ╠═╡ =#
 
 # ╔═╡ 7f37b5d1-ae65-41e3-b9de-9bacf73005d3
+# ╠═╡ disabled = true
 # ╠═╡ skip_as_script = true
 #=╠═╡
 @benchmark Array(sync(fg()))
@@ -4654,24 +4736,29 @@ version = "1.4.1+1"
 # ╔═╡ Cell order:
 # ╟─9a8d10f7-e387-46c0-aaa4-df825d7fd143
 # ╟─af5d6dcd-2663-419a-90ab-a4e3b7b567eb
+# ╟─640c5c2e-a463-4041-a6a5-867cf9a4dd1c
 # ╟─f47f01a1-cb57-43c7-b323-73a63858c532
 # ╟─69e56aef-0ceb-4cb2-bdec-e6f23e145b5b
 # ╠═92b03dd1-0466-48ec-84e5-f3c05251ae8f
-# ╟─4f761eb7-0428-4ace-bd52-c1e30f169e5a
 # ╠═328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
-# ╠═8be48613-f2a4-4dbe-9b03-86a3b1522249
-# ╠═bf0c6d50-2999-4c4b-86ca-e973002bdd6b
+# ╠═829e9956-f198-46db-b98f-cdb9e0e57536
+# ╠═b7d39600-c5cb-46e8-9e7d-3eba60a38fa6
 # ╠═c5f1fb76-fe61-466a-aec4-23331b0887a9
+# ╠═8470f836-8610-4bde-9f52-dcf1ab657bec
+# ╠═b35bd476-a6d7-4ae4-8142-6e0ded4f7857
+# ╠═fa93288a-4a6a-46c4-aa47-201fed444dfe
 # ╠═b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
-# ╟─a3eeaff1-1f98-4b9e-ace9-2d3a5c0110bf
-# ╟─e2482eb4-2bbd-4fef-9572-16287f0d11de
+# ╠═9e994b57-876a-43da-b479-519737dda20b
+# ╟─4f761eb7-0428-4ace-bd52-c1e30f169e5a
+# ╠═a3eeaff1-1f98-4b9e-ace9-2d3a5c0110bf
+# ╠═e2482eb4-2bbd-4fef-9572-16287f0d11de
 # ╠═35cbfad7-825d-4961-b24d-56f8cb70a513
 # ╠═57e9ca9d-9427-40bd-8945-3c9f64dd600a
 # ╠═2f5afb7c-8b1c-4592-bf2a-4259030a1009
-# ╟─54e4d041-0476-48d6-974d-7b0820a6f1ed
+# ╠═54e4d041-0476-48d6-974d-7b0820a6f1ed
 # ╟─36127489-a94e-4ca8-afd1-4db7575a0b81
 # ╟─70ad1a78-ddf2-41bb-b488-e64c6acc5e5d
-# ╠═e44a420c-7355-46a9-a87b-754bb15c6483
+# ╟─e44a420c-7355-46a9-a87b-754bb15c6483
 # ╟─95e08cb9-bda6-4ac9-8c30-65f3228efa2c
 # ╟─98b5c944-20fd-481f-a945-fc8cd997e9aa
 # ╟─b1987990-4097-11eb-0b47-a5a4066542c3
@@ -4736,24 +4823,18 @@ version = "1.4.1+1"
 # ╟─0379641b-62e7-4118-be6d-4af457481a90
 # ╟─c864f046-3f0b-11eb-3973-4f53d2419f30
 # ╠═a5816c6c-3fc4-11eb-3356-e19b884ebb0d
-# ╟─54260849-84ea-4416-9525-f36f16282d45
-# ╠═8ba5e929-38ff-4535-b36a-b2fb886ca5c0
-# ╠═06bb4896-bd0e-49fa-bcbc-d2f0d94d6970
-# ╠═0f819356-e4ee-4c78-b9c5-c33c2011ae7d
-# ╠═da1de970-7eb7-47bc-8c91-5b1a3282504f
-# ╠═08699372-e37d-49af-928c-d6d72823f633
 # ╟─bb9a52ae-8929-4656-a985-15bad69216f8
 # ╟─73918b6a-60bd-4c57-8963-d9a6da3c2d38
 # ╟─f41607f8-cd04-4937-8c59-c952221f9112
 # ╟─5ac55af9-b174-44e8-a9fa-8790c20bd0be
 # ╟─20f5da3a-6180-4412-b746-61273c77587e
-# ╟─60218002-f04c-4b35-8d72-7228338a665a
-# ╟─75b66ef5-972b-412b-aee5-d63791de9b7f
-# ╟─bc851704-6b05-4398-8152-2955fed0a704
-# ╟─bf6b94ea-4caa-419f-a166-ffeb9d311a9e
-# ╟─6c42ea7c-d1ed-445c-bb6c-0c23f1a63dab
-# ╟─449a1328-e17d-4d1a-9a85-384d4fe801b4
-# ╟─81d2d4d8-489f-4cb3-8bbf-387e9a577148
+# ╠═60218002-f04c-4b35-8d72-7228338a665a
+# ╠═75b66ef5-972b-412b-aee5-d63791de9b7f
+# ╠═bc851704-6b05-4398-8152-2955fed0a704
+# ╠═bf6b94ea-4caa-419f-a166-ffeb9d311a9e
+# ╠═6c42ea7c-d1ed-445c-bb6c-0c23f1a63dab
+# ╠═449a1328-e17d-4d1a-9a85-384d4fe801b4
+# ╠═81d2d4d8-489f-4cb3-8bbf-387e9a577148
 # ╠═8bc690fa-409a-11eb-0f03-cf55800897bb
 # ╠═a9c30e06-a931-4dfe-90ab-bacd5d532159
 # ╟─6ca9a99a-8f25-47ec-bce5-3f847570879c
@@ -4784,7 +4865,7 @@ version = "1.4.1+1"
 # ╠═df92f9a8-3296-4613-8ec8-aa83894c41c3
 # ╠═7789a11d-8e19-4988-962c-a273a12c916b
 # ╠═b5dfef37-0aaf-4fd1-8c4e-f629216a6f27
-# ╟─7f37b5d1-ae65-41e3-b9de-9bacf73005d3
+# ╠═7f37b5d1-ae65-41e3-b9de-9bacf73005d3
 # ╠═005d09bd-5f61-4b3c-8531-0080d92661ca
 # ╟─34227e32-ca2d-4099-8f52-f7842491c0a5
 # ╠═9dfa5cf9-ce6e-4578-8a8c-df6bdeaafe0f
