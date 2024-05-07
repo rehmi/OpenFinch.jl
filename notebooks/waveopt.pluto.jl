@@ -98,60 +98,103 @@ begin
 	URI = "ws://$host:$port/ws"
 end
 
-# ╔═╡ 328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
+# ╔═╡ 351cfd74-e7fb-4ad7-ba54-3c64eb9134c1
 begin
-    function start_openfinch_communication(URI)
-        send_channel = Channel{Dict}(10)  # Channel for sending messages
-        receive_channel = Channel{Dict}(10)  # Channel for received messages
+	
+    mutable struct OpenFinchConnection
+        send_channel::Channel{Dict}
+        receive_channel::Channel{Dict}
+        send_task::Task
+        receive_task::Task
 
-		length(ch::Channel) = ch.n_avail_items
-		capacity(ch::Channel) = ch.sz_max
-
-        # Start a task to handle sending messages asynchronously
-        send_task = @async begin
-            HTTP.WebSockets.open(URI) do ws
-                while true
-					if isready(send_channel)  # Continue as long as there are messages to send
-						message = take!(send_channel)
-						jsmessage = JSON.json(message)
-						HTTP.WebSockets.send(ws, jsmessage)
-					end
-                    sleep(0.01)  # Prevent tight loop from consuming too much CPU
+        function OpenFinchConnection(URI)
+            send_channel = Channel{Dict}(10)  # Channel for sending messages
+            receive_channel = Channel{Dict}(10)  # Channel for received messages
+			
+            # Start a task to handle sending messages asynchronously
+            send_task = @async begin
+                try
+                    HTTP.WebSockets.open(URI) do ws
+						# XXX how do we receive messages in this block?!
+                        while isopen(send_channel)
+                            if isready(send_channel)  # Continue as long as there are messages to send
+                                message = take!(send_channel)
+                                jsmessage = JSON.json(message)
+                                HTTP.WebSockets.send(ws, jsmessage)
+                            end
+                            sleep(0.01)  # Prevent tight loop from consuming too much CPU
+                        end
+                    end
+                catch e
+                    @warn "Error in send task: $e"
+                finally
+                    close(send_channel)
                 end
             end
-        end
 
-        # Start a separate task to handle receiving messages asynchronously
-        receive_task = @async begin
-            HTTP.WebSockets.open(URI) do ws
-				while true
-					try
-                    	received_msg = HTTP.WebSockets.receive(ws)
-					catch e
-						@warn "WebSocket has been closed."
-						break
-					end
-					try
-                        parsed_msg = JSON.parse(received_msg)
-						if length(receive_channel) < capacity(receive_channel)
-							put!(receive_channel, parsed_msg)
-						else
-							@warn "Receive channel is full, dropping oldest message"
-							take!(receive_channel)
-							put!(receive_channel, parsed_msg)
-						end
-					catch e
-						@warn "Failed to parse received message"
-					end
-					sleep(0.01)  # Prevent tight loop from consuming too much CPU
-				end
+			# XXX THIS NEEDS TO BE IN THE WebSockets.open CONTEXT ABOVE
+            # Start a separate task to handle receiving messages asynchronously
+            receive_task = @async begin
+                try
+                    HTTP.WebSockets.open(URI) do ws
+                        while isopen(receive_channel)
+                            try
+                                received_msg = HTTP.WebSockets.receive(ws)
+                            catch e
+                                @warn "WebSocket has been closed."
+                                break
+                            end
+                            try
+                                parsed_msg = JSON.parse(received_msg)
+                                if !isfull(receive_channel)
+                                    put!(receive_channel, parsed_msg)
+                                else
+                                    @warn "Receive channel is full, dropping oldest message"
+                                    take!(receive_channel)
+                                    put!(receive_channel, parsed_msg)
+                                end
+                            catch e
+                                @warn "Failed to parse received message"
+                            end
+                            sleep(0.01)  # Prevent tight loop from consuming too much CPU
+                        end
+                    end
+                catch e
+                    @warn "Error in receive task: $e"
+                finally
+                    close(receive_channel)
+                end
             end
+
+            conn = new(send_channel, receive_channel, send_task, receive_task)
+            finalizer(close, conn)  # Register the finalizer
+            return conn
         end
+	end
+	
+	function Base.close(conn::OpenFinchConnection)
+	    close(conn.send_channel)
+	    close(conn.receive_channel)
+	    # wait(conn.send_task)
+	    # wait(conn.receive_task)
+	end
 
-        return send_channel, receive_channel, send_task, receive_task
-    end
+	function Base.put!(conn::OpenFinchConnection, obj)
+		put!(conn.send_channel, obj)
+	end
 
-	function send_controls(channel::Channel{Dict}, controls::Dict)
+	function Base.take!(conn::OpenFinchConnection)
+		take!(conn.receive_channel)
+	end
+
+	isfull(ch) = !(ch.n_avail_items < ch.sz_max)
+
+	OpenFinchConnection
+end
+
+# ╔═╡ 328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
+begin
+	function send_controls(channel, controls::Dict)
 	    put!(channel, Dict("set_control" => controls))  # Non-blocking put to the channel
 	end
 
@@ -161,38 +204,12 @@ begin
 	    end
 	end
 
-	# function send_image_file_to_openfinch(image_path::String)
-	#     uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
-	# 	encoded_image = encode_image_file_to_base64(image_path)
-	#     HTTP.WebSockets.open(uri) do ws
-	#         image_message = JSON.json(Dict("slm_image" => encoded_image))
-	#         HTTP.WebSockets.send(ws, image_message)
-	#     end
-	# end
-
-	# function send_controls_to_openfinch(controls::Dict)
-	#     uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
-	#     HTTP.WebSockets.open(uri) do ws
-	#         control_message = JSON.json(Dict("set_control" => controls))
-	#         HTTP.WebSockets.send(ws, control_message)
-	#     end
-	# end
-
 	function image_to_base64(image::Array{<:Colorant})
 		io = IOBuffer()
 		save(Stream{format"PNG"}(io), image)  # Save the image as PNG to the IOBuffer
 		seekstart(io)  # Reset the buffer's position to the beginning
 		return base64encode(io)  # Encode the buffer's content to base64
 	end
-
-	# function send_image_to_openfinch(image::Array{<:Colorant})
-	# 	uri = "ws://winch.local:8000/ws"  # Adjust the URI as needed
-	# 	encoded_image = image_to_base64(image)
-	# 	HTTP.WebSockets.open(uri) do ws
-	# 		image_message = JSON.json(Dict("slm_image" => encoded_image))
-	# 		HTTP.WebSockets.send(ws, image_message)
-	# 	end
-	# end
 
 	function send_image(channel, image::Array{<:Colorant})
 		encoded_image = image_to_base64(image)
@@ -204,28 +221,20 @@ begin
 	"""
 end
 
+# ╔═╡ 556b65ee-f79d-402f-a48c-8e0ce65cc499
+openfinch = OpenFinchConnection(URI)
+
+# ╔═╡ bc2fa5a2-82e5-4602-9a68-3248662ed917
+openfinch
+
 # ╔═╡ 829e9956-f198-46db-b98f-cdb9e0e57536
 @bind clock Clock(1)
 
-# ╔═╡ c5f1fb76-fe61-466a-aec4-23331b0887a9
-openfinch, received, send_task, recv_task = start_openfinch_communication(URI)
-
-# ╔═╡ b7d39600-c5cb-46e8-9e7d-3eba60a38fa6
-clock, recv_task, received #, received.n_avail_items > 0 ? take!(received) : nothing
-
-# ╔═╡ 8470f836-8610-4bde-9f52-dcf1ab657bec
-received
-
-# ╔═╡ b35bd476-a6d7-4ae4-8142-6e0ded4f7857
-recv_task
-
-# ╔═╡ fa93288a-4a6a-46c4-aa47-201fed444dfe
-send_task
-
 # ╔═╡ b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
-send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
+send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 100))
 
 # ╔═╡ 9e994b57-876a-43da-b479-519737dda20b
+# ╠═╡ disabled = true
 # ╠═╡ skip_as_script = true
 #=╠═╡
 put!(openfinch, Dict(
@@ -4739,19 +4748,17 @@ version = "1.4.1+1"
 # ╟─640c5c2e-a463-4041-a6a5-867cf9a4dd1c
 # ╟─f47f01a1-cb57-43c7-b323-73a63858c532
 # ╟─69e56aef-0ceb-4cb2-bdec-e6f23e145b5b
-# ╠═92b03dd1-0466-48ec-84e5-f3c05251ae8f
-# ╠═328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
+# ╟─92b03dd1-0466-48ec-84e5-f3c05251ae8f
+# ╟─328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
+# ╠═351cfd74-e7fb-4ad7-ba54-3c64eb9134c1
+# ╠═556b65ee-f79d-402f-a48c-8e0ce65cc499
+# ╠═bc2fa5a2-82e5-4602-9a68-3248662ed917
 # ╠═829e9956-f198-46db-b98f-cdb9e0e57536
-# ╠═b7d39600-c5cb-46e8-9e7d-3eba60a38fa6
-# ╠═c5f1fb76-fe61-466a-aec4-23331b0887a9
-# ╠═8470f836-8610-4bde-9f52-dcf1ab657bec
-# ╠═b35bd476-a6d7-4ae4-8142-6e0ded4f7857
-# ╠═fa93288a-4a6a-46c4-aa47-201fed444dfe
 # ╠═b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
 # ╠═9e994b57-876a-43da-b479-519737dda20b
 # ╟─4f761eb7-0428-4ace-bd52-c1e30f169e5a
 # ╠═a3eeaff1-1f98-4b9e-ace9-2d3a5c0110bf
-# ╠═e2482eb4-2bbd-4fef-9572-16287f0d11de
+# ╟─e2482eb4-2bbd-4fef-9572-16287f0d11de
 # ╠═35cbfad7-825d-4961-b24d-56f8cb70a513
 # ╠═57e9ca9d-9427-40bd-8945-3c9f64dd600a
 # ╠═2f5afb7c-8b1c-4592-bf2a-4259030a1009
