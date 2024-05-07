@@ -19,6 +19,102 @@ from camera.captures.v4l2 import V4L2CameraController
 from camera.utils.utils import BoundedQueue
 from camera.utils.utils import BooleanControl, IntegerControl, FloatControl, MenuControl
 
+class WebSocketManager:
+    def __init__(self, camera_server):
+        self.camera_server = camera_server
+        self.active_connections = {}
+        self.message_queues = defaultdict(lambda: BoundedQueue(3))
+
+    async def handle_ws(self, request):
+        ws = web.WebSocketResponse(max_msg_size=32*1024*1024)
+        await ws.prepare(request)
+        self.active_connections[ws] = {
+            'stream_frames': False,
+            "use_base64_encoding" : True,
+            'send_fps_updates': False
+        }
+        logging.debug(f"WebSocket connection established: {ws}")
+
+        asyncio.create_task(self.active_connection_wrapper(ws))
+
+        try:
+            async for msg in ws:
+                if msg.type == web.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    await self.camera_server.parse_message(data, ws)
+                else:
+                    logging.debug(f"Received non-text message {msg}")
+        except Exception as e:
+            logging.exception("Error handling WebSocket message")
+        finally:
+            await self.cleanup_connection(ws)                   
+            if ws in self.active_connections:
+                del self.active_connections[ws]
+
+    async def active_connection_wrapper(self, ws):
+        try:
+            while not ws.closed:
+                messages = await self.message_queues[ws].get()
+                if not messages:
+                    logging.debug("No messages to send. Continuing.")
+                    continue
+
+                await self.send_messages(ws, messages)
+        except Exception as e:
+            logging.exception(f"An unexpected error occurred outside the message sending loop: {e}")
+        finally:
+            await self.cleanup_connection(ws)
+            logging.info("Connection cleanup completed.")
+            await self.gracefully_close_connection(ws)
+
+    async def send_messages(self, ws, messages):
+        send_tasks = [asyncio.create_task(self.send_message(ws, message)) for message in messages]
+        for task in asyncio.as_completed(send_tasks, timeout=10):
+            try:
+                await task
+            except asyncio.TimeoutError:
+                logging.error("Timeout while sending message.")
+            except ConnectionResetError:
+                logging.error("Connection reset. Unable to send message.")
+                break
+            except Exception as e:
+                logging.exception(f"Unexpected error while sending message: {e}")
+
+    async def send_message(self, ws, message):
+        if isinstance(message, str):
+            await ws.send_str(message)
+        else:
+            await ws.send_bytes(message)
+
+    async def gracefully_close_connection(self, ws):
+        try:
+            logging.info("Waiting for remaining messages to be sent before closing websocket.")
+            while not self.message_queues[ws].empty():
+                messages = await self.message_queues[ws].get()
+                await self.send_messages(ws, messages)
+
+            logging.info("Remaining messages have been sent, closing websocket")
+            await ws.close()
+            logging.info("WebSocket connection closed gracefully.")
+        except Exception as e:
+            logging.exception("Error while trying to gracefully close WebSocket connection.")
+        finally:
+            if ws in self.active_connections:
+                del self.active_connections[ws]
+            if ws in self.message_queues:
+                del self.message_queues[ws]
+
+    async def cleanup_connection(self, ws):
+        if ws in self.active_connections:
+            del self.active_connections[ws]
+        logging.info(f"Cleaned up websocket connection")
+
+    async def broadcast_to_active_connections(self, func, *args):	
+        tasks = [
+            func(ws, *args) for ws in list(self.active_connections)
+        ]
+        await asyncio.gather(*tasks)
+        
 class CameraServer:
     def __init__(self):
         self.camctrl = Picamera2Controller(device_id=0, controls={})

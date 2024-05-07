@@ -202,7 +202,7 @@
 				</select>
 			</div> -->
 			
-			<div>
+			<!-- <div>
 				<label for="exposure_auto">Exposure Auto:</label>
 				<select id="exposure_auto" name="exposure_auto">
 					<option value="1">Manual Mode</option>
@@ -217,7 +217,7 @@
 					<option value="1">1</option>
 					<option value="2">2</option>
 				</select>
-			</div>
+			</div> -->
 
 			<div>
 				<label for="sweep">Sweep LED time:</label>
@@ -242,11 +242,11 @@
 				<span id="LED_WIDTH_value">4</span>
 			</div>
 
-			<div class="slider-decorated">
+			<!-- <div class="slider-decorated">
 				<label for="JPEG_QUALITY">JPEG quality:</label>
 				<input type="range" id="JPEG_QUALITY" name="JPEG_QUALITY" min="0" max="100" step="1" value="25">
 				<span id="JPEG_QUALITY_value">25</span>
-			</div>
+			</div> -->
 
 		</div>
 
@@ -305,17 +305,17 @@
 	</div>	
 
 	<div>
-		<input type="checkbox" id="stream_frames" name="stream_frames" checked>
+		<input type="checkbox" id="stream_frames" name="stream_frames" unchecked>
 		<label for="stream_frames">Stream Frames</label>
 	</div>
 
 	<div>
-		<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" checked>
+		<input type="checkbox" id="use_base64_encoding" name="use_base64_encoding" unchecked>
 		<label for="use_base64_encoding">Use base64 encoding</label>
 	</div>
 
 	<div>
-		<input type="checkbox" id="send_fps_updates" name="send_fps_updates" checked>
+		<input type="checkbox" id="send_fps_updates" name="send_fps_updates" unchecked>
 		<label for="send_fps_updates">Send FPS updates</label>
 	</div>
 
@@ -325,27 +325,30 @@
 		<button id="fullscreen_submit_btn">Display Full Screen</button>
 	</div>
 
+	<button id="update_controls_btn">Update Controls</button>
+
 	<!-- This control is redundant wrt the camera mode control -->
 	<!-- <div>
 		<label for="exposure_auto_priority">Exposure Auto Priority:</label>
 		<input type="checkbox" id="exposure_auto_priority" name="exposure_auto_priority">
 	</div> -->
 
+	<!-- <div style="position: absolute; bottom: 0%; left: 6%; z-index: 10;"> -->
+	<div>
+		<!-- <p style="color: hsl(0, 0%, 0%); text-shadow: rgb(255, 255, 255) 0px 0px 15px;"> -->
+		<p>
+			Reader/Capture/Controller fps:
+			<span id="image_capture_reader_fps">0</span> /
+			<span id="image_capture_capture_fps">0</span> /
+			<span id="system_controller_fps">0</span>
+		</p>
+	</div>
+
 	<p>
 
 	<div style="position: relative;">
 		<img id="image" alt="image">
-		<div style="position: absolute; bottom: 0%; left: 6%; z-index: 10;">
-			<p style="color: hsl(0, 0%, 0%); text-shadow: rgb(255, 255, 255) 0px 0px 15px;">
-				Reader/Capture/Controller fps:
-				<span id="image_capture_reader_fps">0</span> /
-				<span id="image_capture_capture_fps">0</span> /
-				<span id="system_controller_fps">0</span>
-			</p>
-		</div>
 	</div>
-
-	<button id="update_controls_btn">Update Controls</button>
 
 	<script>
 		// default values for host and port if they have not been previously defined
@@ -392,6 +395,39 @@
 					// }
 					if (data.image_response.metadata) {
 						var metadata = data.image_response.metadata;
+						// var prettyMetadata = JSON.stringify(metadata, null, 2); // Pretty-print the JSON object
+						// document.getElementById('metadata').textContent = prettyMetadata;
+
+						// var metadata = data.image_response.metadata;
+
+						// Format ScalerCrop, SensorBlackLevels, and ColourGains
+						if (metadata.ScalerCrop) {
+							metadata.ScalerCrop = metadata.ScalerCrop.map(x => x.toFixed(0)).join(', ');
+						}
+						if (metadata.SensorBlackLevels) {
+							metadata.SensorBlackLevels = metadata.SensorBlackLevels.map(x => x.toFixed(0)).join(', ');
+						}
+						if (metadata.ColourGains) {
+							metadata.ColourGains = metadata.ColourGains.map(x => x.toFixed(3)).join(', ');
+						}
+						if (metadata.DigitalGain) {
+						    metadata.DigitalGain = metadata.DigitalGain.toFixed(3);
+						}
+						if (metadata.Lux) {
+						    metadata.Lux = metadata.Lux.toFixed(3);
+						}
+						if (metadata.AnalogueGain) {
+						    metadata.AnalogueGain = metadata.AnalogueGain.toFixed(3);
+						}
+						// Format ColourCorrectionMatrix
+						if (metadata.ColourCorrectionMatrix) {
+							var formattedMatrix = '';
+							for (var i = 0; i < 9; i += 3) {
+								formattedMatrix += metadata.ColourCorrectionMatrix.slice(i, i + 3).map(x => x.toFixed(3)).join(' ') + '; ';
+							}
+							metadata.ColourCorrectionMatrix = formattedMatrix.trim();
+						}
+
 						var prettyMetadata = JSON.stringify(metadata, null, 2); // Pretty-print the JSON object
 						document.getElementById('metadata').textContent = prettyMetadata;
 					}
@@ -617,28 +653,28 @@
 		// 	}
 		// });
 
-		document.getElementById('backlight_compensation').addEventListener('input', function () {
-			var compensation = this.value;
-			document.getElementById('backlight_compensation_value').textContent = compensation;
-			if (ws.readyState == WebSocket.OPEN) {
-				ws.send(JSON.stringify({
-					'backlight_compensation': {
-						'value': parseInt(compensation)
-					}
-				}));
-			}
-		});
+		// document.getElementById('backlight_compensation').addEventListener('input', function () {
+		// 	var compensation = this.value;
+		// 	document.getElementById('backlight_compensation_value').textContent = compensation;
+		// 	if (ws.readyState == WebSocket.OPEN) {
+		// 		ws.send(JSON.stringify({
+		// 			'backlight_compensation': {
+		// 				'value': parseInt(compensation)
+		// 			}
+		// 		}));
+		// 	}
+		// });
 
-		document.getElementById('exposure_auto').addEventListener('change', function () {
-			var exposureAuto = this.value;
-			if (ws.readyState == WebSocket.OPEN) {
-				ws.send(JSON.stringify({
-					'exposure_auto': {
-						'value': exposureAuto
-					}
-				}));
-			}
-		});
+		// document.getElementById('exposure_auto').addEventListener('change', function () {
+		// 	var exposureAuto = this.value;
+		// 	if (ws.readyState == WebSocket.OPEN) {
+		// 		ws.send(JSON.stringify({
+		// 			'exposure_auto': {
+		// 				'value': exposureAuto
+		// 			}
+		// 		}));
+		// 	}
+		// });
 
 		document.getElementById('capture_mode').addEventListener('change', function () {
 		    var selectedMode = this.value;
