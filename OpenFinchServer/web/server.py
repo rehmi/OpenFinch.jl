@@ -19,102 +19,131 @@ from camera.captures.v4l2 import V4L2CameraController
 from camera.utils.utils import BoundedQueue
 from camera.utils.utils import BooleanControl, IntegerControl, FloatControl, MenuControl
 
-class WebSocketManager:
+class MessageHandler:
     def __init__(self, camera_server):
         self.camera_server = camera_server
-        self.active_connections = {}
-        self.message_queues = defaultdict(lambda: BoundedQueue(3))
-
-    async def handle_ws(self, request):
-        ws = web.WebSocketResponse(max_msg_size=32*1024*1024)
-        await ws.prepare(request)
-        self.active_connections[ws] = {
-            'stream_frames': False,
-            "use_base64_encoding" : True,
-            'send_fps_updates': False
+        self.handlers = {
+            'sweep_enable': self.handle_sweep_enable,
+            'update_controls': self.handle_update_controls,
+            'capture_mode': self.handle_capture_mode,
+            'JPEG_QUALITY': self.handle_jpeg_quality,
+            'LED_TIME': lambda data, ws: self.handle_config_control('LED_TIME', data, ws),
+            'LED_WIDTH': lambda data, ws: self.handle_config_control('LED_WIDTH', data, ws),
+            'WAVE_DURATION': lambda data, ws: self.handle_config_control('WAVE_DURATION', data, ws),
+            'exposure_absolute': self.handle_camera_control,
+            'brightness': self.handle_camera_control,
+            'contrast': self.handle_camera_control,
+            'saturation': self.handle_camera_control,
+            'hue': self.handle_camera_control,
+            'gamma': self.handle_camera_control,
+            'gain': self.handle_camera_control,
+            'power_line_frequency': self.handle_camera_control,
+            'sharpness': self.handle_camera_control,
+            'backlight_compensation': self.handle_camera_control,
+            'exposure_auto': self.handle_camera_control,
+            'exposure_auto_priority': self.handle_camera_control,
+            'colour_gain_red': self.handle_dummy,
+            'colour_gain_blue': self.handle_dummy,
+            'send_fps_updates': self.handle_fps_updates,
+            'stream_frames': self.handle_stream_frames,
+            'use_base64_encoding': self.handle_use_base64_encoding,
+            'image_request': self.handle_image_request,
+            'slm_image_url': self.handle_display_image_url,
+            'slm_image': self.handle_slm_image,
         }
-        logging.debug(f"WebSocket connection established: {ws}")
 
-        asyncio.create_task(self.active_connection_wrapper(ws))
-
+    async def parse_message(self, data, ws):
         try:
-            async for msg in ws:
-                if msg.type == web.WSMsgType.TEXT:
-                    data = json.loads(msg.data)
-                    await self.camera_server.parse_message(data, ws)
-                else:
-                    logging.debug(f"Received non-text message {msg}")
+            if 'set_control' in data:
+                for control_name, control_value in data['set_control'].items():
+                    await self.set_control(control_name, control_value, ws)
+
+            for key, value in data.items():
+                if key in self.handlers:
+                    await self.handlers[key](value, ws)
+
         except Exception as e:
-            logging.exception("Error handling WebSocket message")
-        finally:
-            await self.cleanup_connection(ws)                   
-            if ws in self.active_connections:
-                del self.active_connections[ws]
+            logging.exception("MessageHandler.parse_message")
 
-    async def active_connection_wrapper(self, ws):
-        try:
-            while not ws.closed:
-                messages = await self.message_queues[ws].get()
-                if not messages:
-                    logging.debug("No messages to send. Continuing.")
-                    continue
-
-                await self.send_messages(ws, messages)
-        except Exception as e:
-            logging.exception(f"An unexpected error occurred outside the message sending loop: {e}")
-        finally:
-            await self.cleanup_connection(ws)
-            logging.info("Connection cleanup completed.")
-            await self.gracefully_close_connection(ws)
-
-    async def send_messages(self, ws, messages):
-        send_tasks = [asyncio.create_task(self.send_message(ws, message)) for message in messages]
-        for task in asyncio.as_completed(send_tasks, timeout=10):
-            try:
-                await task
-            except asyncio.TimeoutError:
-                logging.error("Timeout while sending message.")
-            except ConnectionResetError:
-                logging.error("Connection reset. Unable to send message.")
-                break
-            except Exception as e:
-                logging.exception(f"Unexpected error while sending message: {e}")
-
-    async def send_message(self, ws, message):
-        if isinstance(message, str):
-            await ws.send_str(message)
+    async def set_control(self, control_name, control_value, ws):
+        if control_name in self.handlers:
+            await self.handlers[control_name]({'value': control_value}, ws)
         else:
-            await ws.send_bytes(message)
+            await self.handle_camera_control(control_name, control_value)
+            
+    async def handle_camera_control(self, control_name, data):
+        if isinstance(data, dict):
+            value = data.get('value', 0)
+        else:
+            value = data
+        await self.camera_server._set_control(control_name, value)
 
-    async def gracefully_close_connection(self, ws):
+    async def handle_sweep_enable(self, data, ws):
+        self.camera_server.sweep_enable = data.get('value', False)
+
+    async def handle_update_controls(self, data, ws):
+        control_values = {control.name: self.camera_server._get_control(control.name) for control in self.camera_server.camctrl.get_control_descriptors().values()}
+        await self.camera_server.broadcast_to_active_connections(self.camera_server.send_str, json.dumps({'update_controls': control_values}))
+
+    async def handle_capture_mode(self, data, ws):
+        mode = data.get('value', 'preview')
+        self.camera_server.sysctrl.set_capture_mode(mode)
+        logging.debug(f"Camera mode set to {mode}")
+
+    async def handle_jpeg_quality(self, data, ws):
+        self.camera_server.jpeg_quality = int(data.get('value', 10))
+
+    async def handle_config_control(self, control_name, data, ws):
+        logging.debug(f"handle_config_control called with data: {data}")
+        value = int(data.get('value', 0))
+        if control_name in ['LED_TIME', 'LED_WIDTH', 'WAVE_DURATION']:
+            setattr(self.camera_server.sysctrl.config, control_name, value)
+            self.camera_server.sysctrl.update_wave()
+
+    async def handle_dummy(self, data, ws):
+        logging.info(f"handle_dummy({data})")
+
+    async def handle_fps_updates(self, data, ws):
+        self.camera_server.active_connections[ws]['send_fps_updates'] = data.get('value', False)
+        logging.info(f"FPS updates {'enabled' if self.camera_server.active_connections[ws]['send_fps_updates'] else 'disabled'} for {ws}")
+
+    async def handle_stream_frames(self, data, ws):
+        self.camera_server.active_connections[ws]['stream_frames'] = data.get('value', True)
+        logging.info(f"Frame streaming {'enabled' if self.camera_server.active_connections[ws]['stream_frames'] else 'disabled'} for {ws}")
+
+    async def handle_use_base64_encoding(self, data, ws):
+        self.camera_server.active_connections[ws]['use_base64_encoding'] = data.get('value', True)
+        logging.info(f"base64 encoding {'enabled' if self.camera_server.active_connections[ws]['use_base64_encoding'] else 'disabled'} for {ws}")
+
+    async def handle_image_request(self, data, ws):
+        logging.debug(f"CameraServer.handle_image_request() was called")
+        return
+
+    async def handle_display_image_url(self, data, ws):
         try:
-            logging.info("Waiting for remaining messages to be sent before closing websocket.")
-            while not self.message_queues[ws].empty():
-                messages = await self.message_queues[ws].get()
-                await self.send_messages(ws, messages)
+            response = requests.get(data)
+            response.raise_for_status()
+            image_bytes = response.content
+            img = Image.open(BytesIO(image_bytes))
+            self.camera_server.display.display_image(img)
+        except requests.exceptions.HTTPError as err:
+            logging.exception(f"Error retrieving image")
 
-            logging.info("Remaining messages have been sent, closing websocket")
-            await ws.close()
-            logging.info("WebSocket connection closed gracefully.")
-        except Exception as e:
-            logging.exception("Error while trying to gracefully close WebSocket connection.")
-        finally:
-            if ws in self.active_connections:
-                del self.active_connections[ws]
-            if ws in self.message_queues:
-                del self.message_queues[ws]
+    async def handle_slm_image(self, data, ws):
+        encoded_image = data
+        logging.info(f"SLM_image received {len(encoded_image)} bytes")
 
-    async def cleanup_connection(self, ws):
-        if ws in self.active_connections:
-            del self.active_connections[ws]
-        logging.info(f"Cleaned up websocket connection")
-
-    async def broadcast_to_active_connections(self, func, *args):	
-        tasks = [
-            func(ws, *args) for ws in list(self.active_connections)
-        ]
-        await asyncio.gather(*tasks)
+        if encoded_image == 'next':
+            image_blob = await ws.receive_bytes()
+            img = Image.open(BytesIO(image_blob))
+        else:
+            # Decode the base64 image and display it
+            image_bytes = base64.b64decode(encoded_image)
+            img = Image.open(BytesIO(image_bytes))
         
+        logging.info(f"img has type {type(img)} and size {img.size}")
+        self.camera_server.display.display_image(img)
+
 class CameraServer:
     def __init__(self):
         self.camctrl = Picamera2Controller(device_id=0, controls={})
@@ -132,36 +161,7 @@ class CameraServer:
         self.monitor_index = 1
         self.jpeg_quality = 75
 
-        self.handlers = {
-            'sweep_enable':
-                lambda data: self.handle_sweep_enable(data),
-            # XXX need to rethink this, or at least also pass ws as well; maybe use *args instead of data?
-            'update_controls': lambda data: self.handle_update_controls(data),
-            'capture_mode': lambda data: self.handle_capture_mode(data),
-            'JPEG_QUALITY': lambda data: self.handle_jpeg_quality(data),
-            'capture_mode': lambda data: self.handle_capture_mode(data),
-
-            'LED_TIME': lambda data: self.handle_config_control('LED_TIME', data),
-            'LED_WIDTH': lambda data: self.handle_config_control('LED_WIDTH', data),
-            'WAVE_DURATION': lambda data: self.handle_config_control('WAVE_DURATION', data),
-
-            'exposure_absolute': lambda data: self.handle_camera_control('exposure_absolute', data),
-            'brightness': lambda data: self.handle_camera_control('brightness', data),
-            'contrast': lambda data: self.handle_camera_control('contrast', data),
-            'saturation': lambda data: self.handle_camera_control('saturation', data),
-            'hue': lambda data: self.handle_camera_control('hue', data),
-            'gamma': lambda data: self.handle_camera_control('gamma', data),
-            'gain': lambda data: self.handle_camera_control('gain', data),
-            'power_line_frequency': lambda data: self.handle_camera_control('power_line_frequency', data),
-            'sharpness': lambda data: self.handle_camera_control('sharpness', data),
-            'backlight_compensation': lambda data: self.handle_camera_control('backlight_compensation', data),
-            'exposure_auto': lambda data: self.handle_camera_control('exposure_auto', data),
-            'exposure_auto_priority': lambda data: self.handle_camera_control('exposure_auto_priority', data),
-            'colour_gain_red': lambda data: self.handle_dummy('colour_gain_red', data),
-            'colour_gain_blue': lambda data: self.handle_dummy('colour_gain_blue', data),
-            # XXX what was this unfinished thought?
-            # 'ColourGains': lambda data: self.handle_colour_gain(data),
-        }
+        self.message_handler = MessageHandler(self) # Initialize the message handler
 
         try:
             self.initialize_display()
@@ -169,44 +169,13 @@ class CameraServer:
             logging.exception("CameraServer trying to initialize_display")
             pass
 
-    async def handle_dummy(self, name, data):
-        logging.info(f"handle_dummy({name}, {data})")
-
     def shutdown(self):
         # self.camctrl.shutdown()
         self.sysctrl.shutdown()
 
-    async def set_control(self, control_name, control_value):
-        if control_name in self.handlers:
-            await self.handlers[control_name]({'value': control_value})
-        else:
-            await self.handle_camera_control(control_name, {'value': control_value})
-
-    def set_color_gains(self, red_gain, blue_gain):
-        """
-        Sets the color gains for the camera.
-
-        Parameters:
-        - red_gain (float): The gain value for the red channel.
-        - blue_gain (float): The gain value for the blue channel.
-        """
-        # Ensure the gains are within the allowed range as defined in IMX296.py
-        # For simplicity, let's assume the range is (0.0, 32.0) for both gains.
-        # You might want to fetch the actual range from the camera controls if it varies.
-        red_gain = max(0.0, min(32.0, red_gain))
-        blue_gain = max(0.0, min(32.0, blue_gain))
-
-        # Set the ColourGains control
-        try:
-            self.camctrl.set_controls({"ColourGains": (red_gain, blue_gain)})
-            logging.info(f"Color gains set to red: {red_gain}, blue: {blue_gain}")
-        except Exception as e:
-            logging.error(f"Failed to set color gains: {e}")
-
     async def handle_ws(self, request):
         ws = web.WebSocketResponse(max_msg_size=32*1024*1024)
         await ws.prepare(request)
-        # Initialize preferences
         self.active_connections[ws] = {
             'stream_frames': False,
             "use_base64_encoding" : True,
@@ -214,27 +183,24 @@ class CameraServer:
         }
         logging.debug(f"WebSocket connection established: {ws}")
 
-        # Start the active_connection_wrapper task for this connection
         asyncio.create_task(self.active_connection_wrapper(ws))
         
-        # start a handler loop that persists as long as the websocket
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
-                    await self.parse_message(data, ws)
+                    await self.message_handler.parse_message(data, ws) # Use the message handler to parse the message
                 else:
                     logging.debug(f"Received non-text message {msg}")
 
         except Exception as e:
             logging.exception("Error handling WebSocket message")
         finally:
-            # the websocket has closed or an error occurred.
             logging.debug(f"WebSocket connection closed: {ws}")
             await self.cleanup_connection(ws)                   
             if ws in self.active_connections:
                 del self.active_connections[ws]
-
+                
     async def cleanup_connection(self, ws):
         if ws in self.active_connections:
             del self.active_connections[ws]
@@ -300,7 +266,8 @@ class CameraServer:
 
     async def broadcast_to_active_connections(self, func, *args):	
         tasks = [
-            func(ws, *args) for ws in list(self.active_connections) # Create a copy of the set to avoid modifying it while iterating
+            # Create a copy of the set to avoid modifying it while iterating
+            func(ws, *args) for ws in list(self.active_connections) 
         ]
         await asyncio.gather(*tasks)
 
@@ -331,59 +298,6 @@ class CameraServer:
         except Exception as e:
             logging.exception(f"Failed to send data to {ws}")
             await self.cleanup_connection(ws)
-
-    async def parse_message(self, data, ws):
-        try:
-            if 'set_control' in data:
-                for control_name, control_value in data['set_control'].items():
-                    if control_name == 'slm_image_url':
-                        await self.handle_display_image_url(control_value)
-                    else:
-                        await self.set_control(control_name, control_value)
-            
-            for key, handler in self.handlers.items():
-                if key in data:
-                    await handler(data[key])
-
-            if 'send_fps_updates' in data:
-                await self.handle_fps_updates(ws, data['send_fps_updates'])
-
-            if 'stream_frames' in data:
-                await self.handle_stream_frames(ws, data['stream_frames'])
-                
-            if 'use_base64_encoding' in data:
-                await self.handle_use_base64_encoding(ws, data['use_base64_encoding'])
-
-            if 'image_request' in data:
-                await self.handle_image_request(data, ws)
-
-            # Check for the slm_image_url command
-            if 'slm_image_url' in data:
-                await self.handle_display_image_url(data['slm_image_url'])
-
-            if 'slm_image' in data:
-                encoded_image = data['slm_image']
-                logging.info(f"SLM_image received {len(encoded_image)} bytes")
-
-                if encoded_image == 'next':
-                    image_blob = await ws.receive_bytes()
-                    img = Image.open(BytesIO(image_blob))
-                else:
-                    # Decode the base64 image and display it
-                    image_bytes = base64.b64decode(encoded_image)
-                    img = Image.open(BytesIO(image_bytes))
-                
-                logging.info(f"img has type {type(img)} and size {img.size}")
-                self.display.display_image(img)
-
-        except Exception as e:
-            logging.exception("CameraServer.parse_message")
-        
-    async def handle_update_controls(self, data):
-        # Collect the current control values
-        control_values = {control.name: self._get_control(control.name) for control in self.camctrl.get_control_descriptors().values()}
-        # Send the control values to the client
-        await self.broadcast_to_active_connections(self.send_str, json.dumps({'update_controls': control_values}))
 
     def generate_control_descriptors(self, controls):
         descriptors = []
@@ -523,63 +437,14 @@ class CameraServer:
         except Exception as e:
             logging.exception("Exception in send_fps_update")
 
-    async def handle_fps_updates(self, ws, preference_data):
-        self.active_connections[ws]['send_fps_updates'] = preference_data.get('value', False)
-        logging.info(f"FPS updates {'enabled' if self.active_connections[ws]['send_fps_updates'] else 'disabled'} for {ws}")
-    
-    async def handle_stream_frames(self, ws, preference_data):
-        self.active_connections[ws]['stream_frames'] = preference_data.get('value', True)
-        logging.info(f"Frame streaming {'enabled' if self.active_connections[ws]['stream_frames'] else 'disabled'} for {ws}")
-
-    async def handle_use_base64_encoding(self, ws, preference_data):
-        self.active_connections[ws]['use_base64_encoding'] = preference_data.get('value', True)
-        logging.info(f"base64 encoding {'enabled' if self.active_connections[ws]['use_base64_encoding'] else 'disabled'} for {ws}")
-
-    async def handle_camera_control(self, control_name, control_data):
-        # Look up the control descriptor by name
-        control_descriptor = next((cd for cd in self.control_descriptors if cd['name'] == control_name), None)
-        logging.debug(f"CameraServer.handle_camera_control({control_name}, {control_data})")
-        value = control_data.get('value', 0)
-        return self._set_control(control_name, value)
-
-    def _set_control(self, control_name, value):
+    async def _set_control(self, control_name, value):
         control_method = getattr(self.sysctrl.vidcap, f"set_control")
         return control_method(control_name, value)
     
-    def _get_control(self, control_name):
+    async def _get_control(self, control_name):
         control_method = getattr(self.sysctrl.vidcap, f"get_control")
         return control_method(control_name)
     
-    async def handle_config_control(self, control_name, control_data):
-        value = int(control_data.get('value', 0))
-        if control_name in ['LED_TIME', 'LED_WIDTH', 'WAVE_DURATION']:
-            setattr(self.sysctrl.config, control_name, value)
-            self.sysctrl.update_wave()
-
-    async def handle_image_request(self, image_request, ws):
-        # XXX this used to work but now that send_captured_image()
-        # broadcasts to all connections we need to refactor it
-        # await self.send_captured_image(ws)
-        logging.debug(f"CameraServer.handle_image_request() was called")
-        return
-    
-    async def handle_sweep_enable(self, sweep_enable):
-        self.sweep_enable = sweep_enable.get('value', False)
-
-    async def handle_jpeg_quality(self, jpeg_quality):
-        self.jpeg_quality = int(jpeg_quality.get('value', 10))
-        
-    async def handle_capture_mode(self, capture_mode):
-        if capture_mode['value'] == 'freerunning':
-            self.sysctrl.set_cam_freerunning()
-        else:
-            self.sysctrl.set_cam_triggered()
-
-    async def handle_capture_mode(self, capture_mode):
-        mode = capture_mode.get('value', 'preview')
-        self.sysctrl.set_capture_mode(mode)
-        logging.debug(f"Camera mode set to {mode}")
-
     async def handle_http(self, request):
         script_dir = os.path.dirname(__file__)
         if request.path == '/':
@@ -587,3 +452,24 @@ class CameraServer:
         else:
             file_path = os.path.join(script_dir, request.path.lstrip('/'))
         return web.FileResponse(file_path)
+
+    def set_color_gains(self, red_gain, blue_gain):
+        """
+        Sets the color gains for the camera.
+
+        Parameters:
+        - red_gain (float): The gain value for the red channel.
+        - blue_gain (float): The gain value for the blue channel.
+        """
+        # Ensure the gains are within the allowed range as defined in IMX296.py
+        # For simplicity, let's assume the range is (0.0, 32.0) for both gains.
+        # You might want to fetch the actual range from the camera controls if it varies.
+        red_gain = max(0.0, min(32.0, red_gain))
+        blue_gain = max(0.0, min(32.0, blue_gain))
+
+        # Set the ColourGains control
+        try:
+            self.camctrl.set_controls({"ColourGains": (red_gain, blue_gain)})
+            logging.info(f"Color gains set to red: {red_gain}, blue: {blue_gain}")
+        except Exception as e:
+            logging.error(f"Failed to set color gains: {e}")
