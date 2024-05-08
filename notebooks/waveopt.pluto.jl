@@ -104,72 +104,62 @@ begin
     mutable struct OpenFinchConnection
         send_channel::Channel{Dict}
         receive_channel::Channel{Dict}
-        send_task::Task
-        receive_task::Task
+        task::Task
 
-        function OpenFinchConnection(URI)
-            send_channel = Channel{Dict}(10)  # Channel for sending messages
-            receive_channel = Channel{Dict}(10)  # Channel for received messages
-			
-            # Start a task to handle sending messages asynchronously
-            send_task = @async begin
-                try
-                    HTTP.WebSockets.open(URI) do ws
-						# XXX how do we receive messages in this block?!
-                        while isopen(send_channel)
-                            if isready(send_channel)  # Continue as long as there are messages to send
-                                message = take!(send_channel)
-                                jsmessage = JSON.json(message)
-                                HTTP.WebSockets.send(ws, jsmessage)
-                            end
-                            sleep(0.01)  # Prevent tight loop from consuming too much CPU
-                        end
-                    end
-                catch e
-                    @warn "Error in send task: $e"
-                finally
-                    close(send_channel)
-                end
-            end
-
-			# XXX THIS NEEDS TO BE IN THE WebSockets.open CONTEXT ABOVE
-            # Start a separate task to handle receiving messages asynchronously
-            receive_task = @async begin
-                try
-                    HTTP.WebSockets.open(URI) do ws
-                        while isopen(receive_channel)
-                            try
-                                received_msg = HTTP.WebSockets.receive(ws)
-                            catch e
-                                @warn "WebSocket has been closed."
-                                break
-                            end
-                            try
-                                parsed_msg = JSON.parse(received_msg)
-                                if !isfull(receive_channel)
-                                    put!(receive_channel, parsed_msg)
-                                else
-                                    @warn "Receive channel is full, dropping oldest message"
-                                    take!(receive_channel)
-                                    put!(receive_channel, parsed_msg)
-                                end
-                            catch e
-                                @warn "Failed to parse received message"
-                            end
-                            sleep(0.01)  # Prevent tight loop from consuming too much CPU
-                        end
-                    end
-                catch e
-                    @warn "Error in receive task: $e"
-                finally
-                    close(receive_channel)
-                end
-            end
-
-            conn = new(send_channel, receive_channel, send_task, receive_task)
-            finalizer(close, conn)  # Register the finalizer
-            return conn
-        end
+		function OpenFinchConnection(URI)
+		    send_channel = Channel{Dict}(4)  # Channel for sending messages
+		    receive_channel = Channel{Dict}(4)  # Channel for received messages
+		
+		    # Start task to handle sending and receiving messages asynchronously
+		    task = @async begin
+		        try
+		            HTTP.WebSockets.open(URI) do ws
+		                # Create a separate task for receiving messages
+		                receive_task = @async begin
+		                    while isopen(receive_channel)
+		                        try
+		                            received_msg = HTTP.WebSockets.receive(ws)
+		                            try
+		                                parsed_msg = JSON.parse(received_msg)
+		                                if !isfull(receive_channel)
+		                                    put!(receive_channel, parsed_msg)
+		                                else
+		                                    # @debug "Receive channel is full, dropping oldest message"
+		                                    take!(receive_channel)
+		                                    put!(receive_channel, parsed_msg)
+		                                end
+		                            catch e
+		                                # @debug "Failed to parse received message"
+		                            end
+		                        catch e
+		                            # @debug "WebSocket has been closed."
+		                            break
+		                        end
+		                        sleep(0.01)  # Prevent tight loop from consuming too much CPU
+		                    end
+		                end
+		
+		                while isopen(send_channel)
+		                    if isready(send_channel)  # Continue as long as there are messages to send
+		                        message = take!(send_channel)
+		                        jsmessage = JSON.json(message)
+		                        HTTP.WebSockets.send(ws, jsmessage)
+		                    end
+		                    sleep(0.01)  # Prevent tight loop from consuming too much CPU
+		                end
+		            end
+		        catch e
+		            @warn "Error in send/receive tasks: $e"
+		        finally
+		            close(send_channel)
+		            close(receive_channel)
+		        end
+		    end
+		
+		    conn = new(send_channel, receive_channel, task)
+		    finalizer(close, conn)  # Register the finalizer
+		    return conn
+		end
 	end
 	
 	function Base.close(conn::OpenFinchConnection)
@@ -184,7 +174,7 @@ begin
 	end
 
 	function Base.take!(conn::OpenFinchConnection)
-		take!(conn.receive_channel)
+		conn.receive_channel.n_avail_items > 0 ? take!(conn.receive_channel) : nothing
 	end
 
 	isfull(ch) = !(ch.n_avail_items < ch.sz_max)
@@ -227,20 +217,35 @@ openfinch = OpenFinchConnection(URI)
 # ╔═╡ bc2fa5a2-82e5-4602-9a68-3248662ed917
 openfinch
 
+# ╔═╡ 7e8d972c-d5c0-4442-bae5-d957afebfa1b
+function decode_image(msg)
+	imbuf = Base64.base64decode(msg["image_response"]["image_base64"])
+	return load(IOBuffer(imbuf))
+end
+
 # ╔═╡ 829e9956-f198-46db-b98f-cdb9e0e57536
 @bind clock Clock(1)
 
+# ╔═╡ b7076e05-da65-47a1-b893-dc4acb5973d4
+clock; msg = take!(openfinch)
+
+# ╔═╡ 0a372f1f-13d3-4cba-a631-9933acef094b
+decode_image(msg)
+
 # ╔═╡ b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 100))
+  ╠═╡ =#
 
 # ╔═╡ 9e994b57-876a-43da-b479-519737dda20b
-# ╠═╡ disabled = true
 # ╠═╡ skip_as_script = true
 #=╠═╡
 put!(openfinch, Dict(
 	"use_base64_encoding"=>Dict("value"=>true),
-	"send_fps_updates"=>Dict("value"=>true),
-	"stream_frames"=>Dict("value"=>false),
+	"send_fps_updates"=>Dict("value"=>false),
+	"stream_frames"=>Dict("value"=>true),
 ))
   ╠═╡ =#
 
@@ -258,7 +263,7 @@ begin
 		<h1>OpenFinch dashboard</h1>
 	
 		<div>
-			<input type="checkbox" id="stream_frames" name="stream_frames" checked>
+			<input type="checkbox" id="stream_frames" name="stream_frames" unchecked>
 			<label for="stream_frames">Stream Frames</label>
 		</div>
 	
@@ -268,7 +273,7 @@ begin
 		</div>
 	
 		<div>
-			<input type="checkbox" id="send_fps_updates" name="send_fps_updates" checked>
+			<input type="checkbox" id="send_fps_updates" name="send_fps_updates" unchecked>
 			<label for="send_fps_updates">Send FPS updates</label>
 		</div>
 	
@@ -4753,6 +4758,9 @@ version = "1.4.1+1"
 # ╠═351cfd74-e7fb-4ad7-ba54-3c64eb9134c1
 # ╠═556b65ee-f79d-402f-a48c-8e0ce65cc499
 # ╠═bc2fa5a2-82e5-4602-9a68-3248662ed917
+# ╠═b7076e05-da65-47a1-b893-dc4acb5973d4
+# ╠═0a372f1f-13d3-4cba-a631-9933acef094b
+# ╠═7e8d972c-d5c0-4442-bae5-d957afebfa1b
 # ╠═829e9956-f198-46db-b98f-cdb9e0e57536
 # ╠═b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
 # ╠═9e994b57-876a-43da-b479-519737dda20b
