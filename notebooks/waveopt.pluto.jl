@@ -40,6 +40,7 @@ begin
 	using JpegTurbo
 	using ImageShow
 	using MosaicViews
+	using Random
 
 	using FourierTools: resample  # override DSP.resample
 	using DSP: conv
@@ -98,39 +99,73 @@ begin
 	URI = "ws://$host:$port/ws"
 end
 
+# ╔═╡ 75530dd1-c7e4-4d1f-92c5-3f016201643f
+# from https://discourse.julialang.org/t/http-jl-websockets-help-getting-started/102867/4
+function rawws(url,headers =[])
+    headers = [
+        "Upgrade" => "websocket",
+        "Connection" => "Upgrade",
+        "Sec-WebSocket-Key" => base64encode(rand(Random.RandomDevice(), UInt8, 16)),
+        "Sec-WebSocket-Version" => "13",
+        headers...
+    ]
+    r = HTTP.openraw("GET",url,headers)[1]
+
+    ws = WebSockets.WebSocket(r)
+    return ws
+end
+
+# ╔═╡ 504dcc12-6fb2-42cb-80a4-0005d122e17e
+ws = rawws(URI)
+
+# ╔═╡ 6b682160-48d0-433c-9e5a-4e16bb6ee464
+WebSockets.send(ws, JSON.json(Dict(
+	"use_base64_encoding"=>Dict("value"=>false),
+	"send_fps_updates"=>Dict("value"=>false),
+	"stream_frames"=>Dict("value"=>false),
+)))
+
+# ╔═╡ 55ceb925-8b2d-4ee9-94a9-ce4f6d8569b1
+ws
+
+# ╔═╡ 171f099e-8fd1-4eb6-8572-a27e1b001b5a
+send(ws, JSON.json(Dict("image_request"=>true)))
+
 # ╔═╡ 351cfd74-e7fb-4ad7-ba54-3c64eb9134c1
 begin
 	
     mutable struct OpenFinchConnection
-        send_channel::Channel{Dict}
-        receive_channel::Channel{Dict}
-        task::Task
+        send_channel::Channel
+        receive_channel::Channel
+        send_task::Task
+        receive_task::Ref
 
 		function OpenFinchConnection(URI)
-		    send_channel = Channel{Dict}(4)  # Channel for sending messages
-		    receive_channel = Channel{Dict}(4)  # Channel for received messages
-		
+		    send_channel = Channel(4)  # Channel for sending messages
+		    receive_channel = Channel(4)  # Channel for received messages
+			receive_task = Ref{Any}(nothing)
 		    # Start task to handle sending and receiving messages asynchronously
-		    task = @async begin
+		    send_task = @async begin
 		        try
 		            HTTP.WebSockets.open(URI) do ws
 		                # Create a separate task for receiving messages
-		                receive_task = @async begin
+		                receive_task[] = @async begin
 		                    while isopen(receive_channel)
 		                        try
 		                            received_msg = HTTP.WebSockets.receive(ws)
-		                            try
-		                                parsed_msg = JSON.parse(received_msg)
-		                                if !isfull(receive_channel)
-		                                    put!(receive_channel, parsed_msg)
-		                                else
-		                                    # @debug "Receive channel is full, dropping oldest message"
-		                                    take!(receive_channel)
-		                                    put!(receive_channel, parsed_msg)
-		                                end
-		                            catch e
-		                                # @debug "Failed to parse received message"
-		                            end
+		                            message = try
+										# @debug "trying to JSON parse message"
+		                                JSON.parse(received_msg)
+                                    catch e
+										# @debug "JSON parsing failed"
+                                        received_msg
+                                    end
+									# lock(receive_channel) do
+                                    	if isfull(receive_channel)
+											take!(receive_channel)
+										end
+										put!(receive_channel, message)
+									# end
 		                        catch e
 		                            # @debug "WebSocket has been closed."
 		                            break
@@ -142,8 +177,12 @@ begin
 		                while isopen(send_channel)
 		                    if isready(send_channel)  # Continue as long as there are messages to send
 		                        message = take!(send_channel)
-		                        jsmessage = JSON.json(message)
-		                        HTTP.WebSockets.send(ws, jsmessage)
+								if message isa Dict
+		                        	jsmessage = JSON.json(message)
+		                        	HTTP.WebSockets.send(ws, jsmessage)
+								else
+									HTTP.WebSockets.send(ws, message)
+								end
 		                    end
 		                    sleep(0.01)  # Prevent tight loop from consuming too much CPU
 		                end
@@ -156,12 +195,12 @@ begin
 		        end
 		    end
 		
-		    conn = new(send_channel, receive_channel, task)
+		    conn = new(send_channel, receive_channel, send_task, receive_task)
 		    finalizer(close, conn)  # Register the finalizer
 		    return conn
 		end
 	end
-	
+
 	function Base.close(conn::OpenFinchConnection)
 	    close(conn.send_channel)
 	    close(conn.receive_channel)
@@ -178,7 +217,7 @@ begin
 	end
 
 	isfull(ch) = !(ch.n_avail_items < ch.sz_max)
-
+	
 	OpenFinchConnection
 end
 
@@ -217,20 +256,48 @@ openfinch = OpenFinchConnection(URI)
 # ╔═╡ bc2fa5a2-82e5-4602-9a68-3248662ed917
 openfinch
 
+# ╔═╡ b7076e05-da65-47a1-b893-dc4acb5973d4
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+clock; begin
+	function pull_msgs(conn)
+		msg = take!(conn)
+			if msg isa Array
+				return msg
+			else
+				return pull_msgs(conn)
+			end
+	end
+	msg = pull_msgs(openfinch)
+end
+  ╠═╡ =#
+
+# ╔═╡ 0a372f1f-13d3-4cba-a631-9933acef094b
+#=╠═╡
+decode_image(msg)
+  ╠═╡ =#
+
 # ╔═╡ 7e8d972c-d5c0-4442-bae5-d957afebfa1b
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 function decode_image(msg)
-	imbuf = Base64.base64decode(msg["image_response"]["image_base64"])
+	if msg isa Dict
+		try
+			imbuf = Base64.base64decode(msg["image_response"]["image_base64"])
+		catch e
+			return nothing
+		end
+	else
+		imbuf = msg
+	end
 	return load(IOBuffer(imbuf))
 end
+  ╠═╡ =#
 
 # ╔═╡ 829e9956-f198-46db-b98f-cdb9e0e57536
 @bind clock Clock(1)
-
-# ╔═╡ b7076e05-da65-47a1-b893-dc4acb5973d4
-clock; msg = take!(openfinch)
-
-# ╔═╡ 0a372f1f-13d3-4cba-a631-9933acef094b
-decode_image(msg)
 
 # ╔═╡ b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
 # ╠═╡ disabled = true
@@ -243,11 +310,23 @@ send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 100))
 # ╠═╡ skip_as_script = true
 #=╠═╡
 put!(openfinch, Dict(
-	"use_base64_encoding"=>Dict("value"=>true),
+	"use_base64_encoding"=>Dict("value"=>false),
 	"send_fps_updates"=>Dict("value"=>false),
 	"stream_frames"=>Dict("value"=>true),
 ))
   ╠═╡ =#
+
+# ╔═╡ e2482eb4-2bbd-4fef-9572-16287f0d11de
+md"""
+| control | value |
+| --: | :-- |
+| red gain | $(@bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)) |
+| blue gain | $(@bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)) |
+| analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
+| LED width | $(@bind LED_WIDTH Slider(0:1:200, default=16, show_value=true)) |
+| LED time | $(@bind LED_TIME Slider(0:1:3000, default=000, show_value=true)) |
+| Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
+"""
 
 # ╔═╡ 4f761eb7-0428-4ace-bd52-c1e30f169e5a
 begin
@@ -418,18 +497,6 @@ var port = "$port";
 </script></body></html>
 $dashboard_html
 """)
-
-# ╔═╡ e2482eb4-2bbd-4fef-9572-16287f0d11de
-md"""
-| control | value |
-| --: | :-- |
-| red gain | $(@bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)) |
-| blue gain | $(@bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)) |
-| analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
-| LED width | $(@bind LED_WIDTH Slider(0:1:200, default=16, show_value=true)) |
-| LED time | $(@bind LED_TIME Slider(0:1:3000, default=000, show_value=true)) |
-| Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
-"""
 
 # ╔═╡ 35cbfad7-825d-4961-b24d-56f8cb70a513
 send_controls(openfinch, Dict(
@@ -2431,18 +2498,6 @@ function fg(;N=1024, L=1f-3)
 	exp.(ϕ)
 end
 
-# ╔═╡ 7004ea3e-7e0b-47fa-b5d1-e004b72919ec
-a = AFArray(collect(1:10))
-
-# ╔═╡ ee501cd2-5994-4c21-b2f6-7f5ae5085cf6
-a, a', a + 0a', 0a + a'
-
-# ╔═╡ df92f9a8-3296-4613-8ec8-aa83894c41c3
-x = 0a + a'
-
-# ╔═╡ 7789a11d-8e19-4988-962c-a273a12c916b
-y = a + 0a'
-
 # ╔═╡ b5dfef37-0aaf-4fd1-8c4e-f629216a6f27
 # ╠═╡ disabled = true
 # ╠═╡ skip_as_script = true
@@ -2463,28 +2518,10 @@ y = a + 0a'
 fc()
   ╠═╡ =#
 
-# ╔═╡ 34227e32-ca2d-4099-8f52-f7842491c0a5
-# ╠═╡ skip_as_script = true
-#=╠═╡
-extrema(abs.(Array(fg()) - fc())[:])
-  ╠═╡ =#
-
 # ╔═╡ 9dfa5cf9-ce6e-4578-8a8c-df6bdeaafe0f
 # ╠═╡ skip_as_script = true
 #=╠═╡
 Array(fg())
-  ╠═╡ =#
-
-# ╔═╡ 34dfa9e2-528a-443e-80d5-39ee2050089a
-# ╠═╡ skip_as_script = true
-#=╠═╡
-typeof(fg())
-  ╠═╡ =#
-
-# ╔═╡ 9f7c161f-185d-4c10-88a5-e781ef06ba05
-# ╠═╡ skip_as_script = true
-#=╠═╡
-HSV(fg())
   ╠═╡ =#
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -2515,6 +2552,7 @@ PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 ProgressLogging = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
 QuartzImageIO = "dca85d43-d64c-5e67-8c65-017450d5d020"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
@@ -4754,19 +4792,24 @@ version = "1.4.1+1"
 # ╟─f47f01a1-cb57-43c7-b323-73a63858c532
 # ╟─69e56aef-0ceb-4cb2-bdec-e6f23e145b5b
 # ╟─92b03dd1-0466-48ec-84e5-f3c05251ae8f
+# ╟─75530dd1-c7e4-4d1f-92c5-3f016201643f
+# ╠═504dcc12-6fb2-42cb-80a4-0005d122e17e
+# ╠═6b682160-48d0-433c-9e5a-4e16bb6ee464
+# ╠═55ceb925-8b2d-4ee9-94a9-ce4f6d8569b1
+# ╠═171f099e-8fd1-4eb6-8572-a27e1b001b5a
 # ╟─328bd3ac-b559-43f6-b4f6-ddcf33ee06eb
-# ╠═351cfd74-e7fb-4ad7-ba54-3c64eb9134c1
+# ╟─351cfd74-e7fb-4ad7-ba54-3c64eb9134c1
 # ╠═556b65ee-f79d-402f-a48c-8e0ce65cc499
 # ╠═bc2fa5a2-82e5-4602-9a68-3248662ed917
 # ╠═b7076e05-da65-47a1-b893-dc4acb5973d4
 # ╠═0a372f1f-13d3-4cba-a631-9933acef094b
-# ╠═7e8d972c-d5c0-4442-bae5-d957afebfa1b
+# ╟─7e8d972c-d5c0-4442-bae5-d957afebfa1b
 # ╠═829e9956-f198-46db-b98f-cdb9e0e57536
 # ╠═b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
 # ╠═9e994b57-876a-43da-b479-519737dda20b
+# ╟─e2482eb4-2bbd-4fef-9572-16287f0d11de
 # ╟─4f761eb7-0428-4ace-bd52-c1e30f169e5a
 # ╠═a3eeaff1-1f98-4b9e-ace9-2d3a5c0110bf
-# ╟─e2482eb4-2bbd-4fef-9572-16287f0d11de
 # ╠═35cbfad7-825d-4961-b24d-56f8cb70a513
 # ╠═57e9ca9d-9427-40bd-8945-3c9f64dd600a
 # ╠═2f5afb7c-8b1c-4592-bf2a-4259030a1009
@@ -4793,8 +4836,8 @@ version = "1.4.1+1"
 # ╠═d5c4a808-06be-4992-9ad2-d7480c6898e3
 # ╠═f54518c6-f215-4438-a1e6-81c93e9cca4f
 # ╟─81f6131a-84f5-42b9-af6a-5eb35e459efe
-# ╠═ef1c75f7-f833-406b-84f1-672276b9f282
-# ╠═f4527ccf-ffcc-402f-b22d-542e2efdb75a
+# ╟─ef1c75f7-f833-406b-84f1-672276b9f282
+# ╟─f4527ccf-ffcc-402f-b22d-542e2efdb75a
 # ╟─d5719963-e960-499a-bc36-d258d829ada0
 # ╟─11725909-3a35-485b-8295-098917ef4c92
 # ╟─bc55d354-8ee0-4fe1-92b7-967cdb51dc2e
@@ -4843,15 +4886,15 @@ version = "1.4.1+1"
 # ╟─f41607f8-cd04-4937-8c59-c952221f9112
 # ╟─5ac55af9-b174-44e8-a9fa-8790c20bd0be
 # ╟─20f5da3a-6180-4412-b746-61273c77587e
-# ╠═60218002-f04c-4b35-8d72-7228338a665a
-# ╠═75b66ef5-972b-412b-aee5-d63791de9b7f
-# ╠═bc851704-6b05-4398-8152-2955fed0a704
-# ╠═bf6b94ea-4caa-419f-a166-ffeb9d311a9e
-# ╠═6c42ea7c-d1ed-445c-bb6c-0c23f1a63dab
-# ╠═449a1328-e17d-4d1a-9a85-384d4fe801b4
-# ╠═81d2d4d8-489f-4cb3-8bbf-387e9a577148
-# ╠═8bc690fa-409a-11eb-0f03-cf55800897bb
-# ╠═a9c30e06-a931-4dfe-90ab-bacd5d532159
+# ╟─60218002-f04c-4b35-8d72-7228338a665a
+# ╟─75b66ef5-972b-412b-aee5-d63791de9b7f
+# ╟─bc851704-6b05-4398-8152-2955fed0a704
+# ╟─bf6b94ea-4caa-419f-a166-ffeb9d311a9e
+# ╟─6c42ea7c-d1ed-445c-bb6c-0c23f1a63dab
+# ╟─449a1328-e17d-4d1a-9a85-384d4fe801b4
+# ╟─81d2d4d8-489f-4cb3-8bbf-387e9a577148
+# ╟─8bc690fa-409a-11eb-0f03-cf55800897bb
+# ╟─a9c30e06-a931-4dfe-90ab-bacd5d532159
 # ╟─6ca9a99a-8f25-47ec-bce5-3f847570879c
 # ╟─7e003a22-ed86-4e13-8a52-66609a7e8c15
 # ╠═7628b409-86e2-41d6-ab82-62175eabaf49
@@ -4863,7 +4906,7 @@ version = "1.4.1+1"
 # ╠═dc401f46-4f9b-4679-84eb-860c3c11b82c
 # ╠═c6932382-5ac5-4d5a-af59-3c22141ac2ea
 # ╠═bf8befeb-0a82-4722-b76a-f912cead0e7d
-# ╠═b6b10e8e-059f-4e20-927e-f9ffcacd5516
+# ╟─b6b10e8e-059f-4e20-927e-f9ffcacd5516
 # ╠═d13dc80d-7c2f-4642-9569-8ada8e3c769d
 # ╠═026fb497-dbed-4dec-9e9d-4f8dc7f88409
 # ╠═1a8c1acc-eeac-42ce-a933-2d50d89804bd
@@ -4875,16 +4918,9 @@ version = "1.4.1+1"
 # ╠═deca9332-8df0-4cf3-bb22-9db514a364a8
 # ╠═ff04ec0b-4ba4-4b14-9f31-e753c9456a45
 # ╠═0de3996e-1604-44bc-b16f-ebf638b1250b
-# ╠═7004ea3e-7e0b-47fa-b5d1-e004b72919ec
-# ╠═ee501cd2-5994-4c21-b2f6-7f5ae5085cf6
-# ╠═df92f9a8-3296-4613-8ec8-aa83894c41c3
-# ╠═7789a11d-8e19-4988-962c-a273a12c916b
 # ╠═b5dfef37-0aaf-4fd1-8c4e-f629216a6f27
 # ╠═7f37b5d1-ae65-41e3-b9de-9bacf73005d3
 # ╠═005d09bd-5f61-4b3c-8531-0080d92661ca
-# ╟─34227e32-ca2d-4099-8f52-f7842491c0a5
 # ╠═9dfa5cf9-ce6e-4578-8a8c-df6bdeaafe0f
-# ╟─34dfa9e2-528a-443e-80d5-39ee2050089a
-# ╠═9f7c161f-185d-4c10-88a5-e781ef06ba05
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

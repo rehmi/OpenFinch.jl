@@ -178,7 +178,7 @@ class CameraServer:
         await ws.prepare(request)
         self.active_connections[ws] = {
             'stream_frames': False,
-            "use_base64_encoding" : True,
+            "use_base64_encoding" : False,
             'send_fps_updates': False
         }
         logging.debug(f"WebSocket connection established: {ws}")
