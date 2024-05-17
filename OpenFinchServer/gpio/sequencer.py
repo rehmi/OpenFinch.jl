@@ -44,10 +44,10 @@ class TriggerConfig:
     # TRIG_OUT: int = TRIG_OUT
     
     TRIG_TIME: int = 0
-    TRIG_WIDTH: int = 33333
+    TRIG_WIDTH: int = 8000
     LED_TIME: int = 400
     LED_WIDTH: int = 4
-    WAVE_DURATION: int = 40000
+    WAVE_DURATION: int = 8300
 
 class PiGPIOScript:
     def __init__(self, pig, text=None, id=None):
