@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.41
+# v0.19.42
 
 using Markdown
 using InteractiveUtils
@@ -109,15 +109,18 @@ end
 md"""
 | control | value |
 | --: | :-- |
+| $\lambda_R$ | $(@bind λR Slider(600:1:700, default=650, show_value=true)) |
+| $\lambda_G$ | $(@bind λG Slider(500:1:600, default=532, show_value=true)) |
+| $\lambda_B$ | $(@bind λB Slider(400:1:500, default=460, show_value=true)) |
 | red gain | $(@bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)) |
 | blue gain | $(@bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)) |
 | analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
-| LED width | $(@bind LED_WIDTH Slider(0:1:200, default=5, show_value=true)) |
-| LED time | $(@bind LED_TIME Slider(0:1:3000, default=0, show_value=true)) |
-| Focal length | $(@bind f Slider(0:1:200, default=50, show_value=true)) |
+| LED width | $(@bind LED_WIDTH Slider(0:1:2700, default=200, show_value=true)) |
+| LED time | $(@bind LED_TIME Slider(0:1:8000, default=50, show_value=true)) |
+| Focal length | $(@bind f Slider(0:1:400, default=55, show_value=true)) |
 | Fine focus | $(@bind df Slider(-1:0.001:1, default=0, show_value=true)) |
-| X offset | $(@bind xoff Slider(-10:0.1:10, default=0, show_value=true)) |
-| Y offset | $(@bind yoff Slider(-10:0.1:10, default=0, show_value=true)) |
+| X offset | $(@bind xoff Slider(-50:1:50, default=-8, show_value=true)) |
+| Y offset | $(@bind yoff Slider(-50:1:50, default=0, show_value=true)) |
 | Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
 """
 
@@ -132,10 +135,30 @@ begin
 	mono_chart = testimage("resolution_test_512");
 	cameraman = testimage("cameraman");
 	mandrill = testimage("mandrill");
+	img = rot180(imresize(mono_chart, ratio=image_scale))
+end
+
+# ╔═╡ 237bd8ad-49d8-4059-b4a0-729a051d93db
+typeof(mono_chart)
+
+# ╔═╡ 5236f897-79ed-46f2-8b51-4aa5a0d78dec
+begin
+	ColorTypes.red(x::Gray) = x
+	ColorTypes.green(x::Gray) = x
+	ColorTypes.blue(x::Gray) = x
 end
 
 # ╔═╡ a7d722af-a962-40a2-ae89-e4e520b88fd2
-img = imresize(mono_chart, ratio=image_scale)
+ϕ_rand = exp.(2im*π*rand(size(img)...));
+
+# ╔═╡ 693a5636-387b-42bf-a130-3111825e11e4
+iR = Float32.(red.(img)) .* ϕ_rand;
+
+# ╔═╡ 2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
+iG = Float32.(green.(img)) .* ϕ_rand;
+
+# ╔═╡ 058d33db-7b24-42a3-930f-f3ee24b6b113
+iB = Float32.(blue.(img)) .* ϕ_rand;
 
 # ╔═╡ 7d12e54d-5cad-4259-a742-c7b8448b4470
 function extract_central(matrix::Matrix, dims::Tuple{Int, Int})
@@ -154,7 +177,8 @@ end
 # ╔═╡ 46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 begin
 	dx = 4.25u"µm"
-	λs = (640, 530, 405) .* u"nm"
+	# λs = (630, 530, 450) .* u"nm"
+	# λs = (λR, λG, λB) .* u"nm"
 
 	Nx, Ny = 2048, 2048
 	Lx, Ly = dx.* (Nx, Ny)
@@ -162,8 +186,10 @@ begin
 	grid = meshgrid(range(-Nx/2, Nx/2, Nx), range(-Ny/2, Ny/2, Ny))
 
 	X,Y = ustrip.(QuantityArray.(collect.(grid), dx))
-	Z = ustrip((f + df)*u"mm")
 end
+
+# ╔═╡ ff2a1617-75ac-46b5-89eb-655dec0ebd79
+Z = ustrip((f + df)*u"mm")
 
 # ╔═╡ eb88fa82-9ff4-4ece-a227-7540088071de
 fx2 = (X.-(xoff*1e-3)).^2;
@@ -171,18 +197,39 @@ fx2 = (X.-(xoff*1e-3)).^2;
 # ╔═╡ ecb25ecf-1273-4ab4-a279-d826814c241d
 fy2 = (Y.-(yoff*1e-3)).^2;
 
-# ╔═╡ c462d8c0-88e3-49b2-9cb1-37238b43e13e
-ϕlens = [
-	exp.(2π/ustrip(λ) * 1im * sqrt.(fx2 .+ fy2 .+ Z^2))
-	for λ in λs
-]
+# ╔═╡ 67634cc3-8c6a-415f-998c-bf597e5f9d83
+R = sqrt.(fx2 .+ fy2 .+ Z^2);
+
+# ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
+ϕlensR = exp.(2π * 1im * R / ustrip(λR*u"nm"));
+
+# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
+ϕR = conv(iR, ϕlensR);
+
+# ╔═╡ 2177271e-fa25-48c1-9c11-67117ae3fde2
+ϕlensG = exp.(2π * 1im * R / ustrip(λG*u"nm"));
+
+# ╔═╡ ceb402ae-ab6b-400e-a481-9bd86a22bc1a
+ϕG = conv(iG, ϕlensG);
+
+# ╔═╡ 6c212ba1-c558-47ad-a621-7c4e653bab86
+ϕlensB = exp.(2π * 1im * R / ustrip(λB*u"nm"));
+
+# ╔═╡ dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
+ϕB = conv(iB, ϕlensB);
+
+# ╔═╡ 39570ba6-7602-4dd6-8827-b709b4a66628
+cgh = rot180(RGB.(
+	(real.(ϕR).>0),
+	(real.(ϕG).>0),
+	(real.(ϕB).>0)
+));
+
+# ╔═╡ 79667c43-705a-4c34-b073-f91eac682674
+slm_img = extract_central(cgh, (720, 1280))
 
 # ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
-ϕ = [ 
-	conv(Float32.(Gray.(img)), ϕlens[1]),
-	conv(Float32.(Gray.(img)), ϕlens[2]),
-	conv(Float32.(Gray.(img)), ϕlens[3]),
-]
+ϕ = [ ϕR, ϕG, ϕB ];
 
 # ╔═╡ d4953849-16cb-4f3f-befe-57f1fc327735
 md"""
@@ -290,7 +337,7 @@ openfinch
 put!(openfinch, Dict(
 	"use_base64_encoding"=>Dict("value"=>false),
 	"send_fps_updates"=>Dict("value"=>false),
-	"stream_frames"=>Dict("value"=>true),
+	"stream_frames"=>Dict("value"=>false),
 ))
 
 # ╔═╡ 5084973f-e4e4-4d43-a155-d848efce3f01
@@ -328,7 +375,7 @@ begin
 end
 
 # ╔═╡ b1dc96c5-67dd-4ab1-a036-fb17c7570b56
-send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 100))
+send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
 
 # ╔═╡ 697746d9-8baf-45a2-9eef-8c63857984b1
 send_controls(openfinch, Dict(
@@ -339,7 +386,11 @@ send_controls(openfinch, Dict(
 	"ScalerCrop" => [3, 0, 1456, 1088] # [384, 0, 1024, 768]
 ));
 
+# ╔═╡ 95b60065-9494-40a4-bdbb-41139ae8d86a
+send_image(openfinch, slm_img)
+
 # ╔═╡ cc316130-cf9e-4dd6-97ef-a114831644ad
+#=╠═╡
 begin
 	Hue(x::HSV{T} where T) = x.h
 	Sat(x::HSV{T} where T) = x.s
@@ -367,19 +418,7 @@ begin
 	
 	md"## Conversion of RGB and ``M\times{N}\times{3}`` arrays"
 end
-
-# ╔═╡ 39570ba6-7602-4dd6-8827-b709b4a66628
-cgh = RGB.(
-	real.(ϕ[1]).>0,
-	real.(ϕ[2]).>0,
-	real.(ϕ[3]).>0
-)
-
-# ╔═╡ 79667c43-705a-4c34-b073-f91eac682674
-slm_img = extract_central(cgh, (720, 1280))
-
-# ╔═╡ 95b60065-9494-40a4-bdbb-41139ae8d86a
-send_image(openfinch, slm_img)
+  ╠═╡ =#
 
 # ╔═╡ bed6430e-89a7-4e0f-9804-827ff23f26d7
 function decode_image(msg)
@@ -2886,19 +2925,31 @@ version = "1.4.1+1"
 # ╠═e3c2f4d1-1e14-4414-b623-594f55053b7a
 # ╠═b1dc96c5-67dd-4ab1-a036-fb17c7570b56
 # ╠═98869068-79fb-42ee-9d21-d0c7f5a8ce1e
-# ╠═79667c43-705a-4c34-b073-f91eac682674
 # ╟─a6003b6c-beea-49ca-bbd3-fcdb62562b2b
 # ╟─697746d9-8baf-45a2-9eef-8c63857984b1
 # ╟─9e0052e2-c13c-42a3-971c-d7482044c25f
+# ╠═79667c43-705a-4c34-b073-f91eac682674
 # ╠═39570ba6-7602-4dd6-8827-b709b4a66628
 # ╟─b3441c7d-a097-435d-b1da-46869b9d2193
 # ╠═a58c5e86-b282-43a7-b74a-7dc8f1e49976
+# ╠═237bd8ad-49d8-4059-b4a0-729a051d93db
+# ╠═5236f897-79ed-46f2-8b51-4aa5a0d78dec
 # ╠═a7d722af-a962-40a2-ae89-e4e520b88fd2
+# ╠═693a5636-387b-42bf-a130-3111825e11e4
+# ╠═2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
+# ╠═058d33db-7b24-42a3-930f-f3ee24b6b113
+# ╠═67634cc3-8c6a-415f-998c-bf597e5f9d83
+# ╠═397911d9-42e3-4a82-bb81-24fb77bd3cc1
+# ╠═2177271e-fa25-48c1-9c11-67117ae3fde2
+# ╠═6c212ba1-c558-47ad-a621-7c4e653bab86
+# ╠═3162b0ae-627b-4511-b453-bb929e80203a
+# ╠═ceb402ae-ab6b-400e-a481-9bd86a22bc1a
+# ╠═dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
 # ╠═1e87f77c-e04e-40c0-a20c-e074a99682aa
-# ╠═c462d8c0-88e3-49b2-9cb1-37238b43e13e
 # ╠═7d12e54d-5cad-4259-a742-c7b8448b4470
 # ╠═95b60065-9494-40a4-bdbb-41139ae8d86a
 # ╠═46836ffe-3b43-4c3b-a4d3-a56e8137aebf
+# ╠═ff2a1617-75ac-46b5-89eb-655dec0ebd79
 # ╠═eb88fa82-9ff4-4ece-a227-7540088071de
 # ╠═ecb25ecf-1273-4ab4-a279-d826814c241d
 # ╟─d4953849-16cb-4f3f-befe-57f1fc327735

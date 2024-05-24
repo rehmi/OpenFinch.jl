@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.41
+# v0.19.42
 
 using Markdown
 using InteractiveUtils
@@ -25,8 +25,12 @@ begin
 	using LazyGrids
 	import StatsBase
 	import PlotlyJS
-	using Unitful
+	import Unitful
 	using Unitful: nm, µm, mm, cm, m
+	using Unitful: upreferred, ustrip, @u_str, Quantity
+	# using DynamicQuantities
+	# const U = DynamicQuantities.Units
+	# const C = DynamicQuantities.Constants
 	using BenchmarkTools
 	using HypertextLiteral
 	using FourierTools
@@ -81,7 +85,7 @@ md"""
 # ╔═╡ af5d6dcd-2663-419a-90ab-a4e3b7b567eb
 begin
 	md"""
-	Enable Table of Contents $(@bind enable_TOC CheckBox(false)) 
+	Enable Table of Contents $(@bind enable_TOC CheckBox(true)) 
 	
 	Show figures $(@bind enable_figs CheckBox(false))
 	
@@ -328,6 +332,9 @@ md"""
 | Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
 """
 
+# ╔═╡ 86b09375-59db-478b-806c-dbb5d2df7817
+methods(red)
+
 # ╔═╡ 4f761eb7-0428-4ace-bd52-c1e30f169e5a
 begin
 	dashboard_html = """
@@ -539,6 +546,14 @@ Select image number: $(@bind image_number Slider(1:length(image_names), default=
 # ╔═╡ 36127489-a94e-4ca8-afd1-4db7575a0b81
 test_image = load(joinpath("..", "data", image_names[image_number]))
 
+# ╔═╡ 2bb0d5cd-70aa-4707-9636-fdd226987571
+md"""
+## Generate and send interferograms
+"""
+
+# ╔═╡ 91a97369-e493-4ef7-9b84-f55b02fe084e
+@bind f Slider(0.1:0.1:100, default=10, show_value=true)
+
 # ╔═╡ 95e08cb9-bda6-4ac9-8c30-65f3228efa2c
 md"""
 ## Test wave optics model
@@ -645,97 +660,15 @@ end
 # 	LightField([λG], [ϕ_image.ϕ])
 # end
 
+# ╔═╡ 6ca9a99a-8f25-47ec-bce5-3f847570879c
+md"""
+## Mapping wavelengths to XYZ colorspace
+"""
+
 # ╔═╡ d5719963-e960-499a-bc36-d258d829ada0
 md"""
 # Calculate PSF for given mask
 """
-
-# ╔═╡ 59abdc6e-eff9-490d-be7a-1808a6a8c808
-#=
-wv_start
-400
-Starting wavelength (nm)
-
-wv_stop
-700
-Stopping wavelength (nm)
-
-wv_step
-2.5
-wavelength step size over interval (nm)
-
-wv_units
-1e-6
-unit convertion w.r.t nm. (1e-6 mm ) or 1 nm
-
-dev
-20
-range from center of current wavelength
-
-dev_steps
-2
-wavelength sampling step size (for psf execution)
-
-batch_size
-121
-Run N parallel wavelength computations. Max wavelengths are 121
-
-dx
-0.5e-3
-sample spacing, mm
-
-ps
-2.24e-3
-sample spacing, mm
-
-z0
-340
-distance, obj to mask, mm
-
-zML
-2
-distace, mask to lens, mm
-
-fL
-3.04
-lens focal length
-
-Ra
-0.76
-aperture radius, mm  # 1.52 is diameter
-
-theta
-0
-mask rotation in degrees, needed for correlation study.
-
-psf_size
-600
-final size of the PSF generated
-
-mask_filename	# default=../data/Mask26.tif
-joinpath(dirname(pathof(WaveOptics)), ../data/Mask26.tif)
-path to mask file tiff
-
-mask_center
-8000
-center: center of the cropped region
-
-mask_sp
-1800
-width of the cropped patch
-
-LEDspect # default=../data/LEDspect.mat
-joinpath(dirname(pathof(WaveOptics)), ../data/LEDspect.mat)
-Bayer pattern led spectral response
-
-dtype
-float32
-default datatype for execution
-
-output_size
-600
-Output (padded) size of final psf.
-=#
 
 # ╔═╡ 51a7dbdc-af5a-4c6e-a406-cd98fb96d464
 md"""
@@ -829,72 +762,6 @@ md"""
 ---
 # Definitions
 """
-
-# ╔═╡ bb9a52ae-8929-4656-a985-15bad69216f8
-md"""
-## CSS to modify Pluto notebook layout
-"""
-
-# ╔═╡ 73918b6a-60bd-4c57-8963-d9a6da3c2d38
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-if enable_TOC
-	TableOfContents()
-end
-  ╠═╡ =#
-
-# ╔═╡ f41607f8-cd04-4937-8c59-c952221f9112
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-@bind screenWidth @htl("""
-	<div>
-	<script>
-		var div = currentScript.parentElement
-		div.value = screen.width
-	</script>
-	</div>
-""")
-  ╠═╡ =#
-
-# ╔═╡ 5ac55af9-b174-44e8-a9fa-8790c20bd0be
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-begin
-	cellWidth= min(850, screenWidth*0.9)
-	@htl("""
-		<style>
-			pluto-notebook {
-				margin: auto;
-				# margin-top: auto;
-				# margin-right: 50px;
-				# margin-bottom: auto;
-				# margin-left: 0px;
-				width: $(cellWidth)px;
-		
-				#display: inline-block;	
-				#width: 300px;
-				#border: 15px solid green;
-				#padding: 50px;
-				#margin: 10px;
-			}
-		</style>
-	""")
-end
-  ╠═╡ =#
-
-# ╔═╡ 20f5da3a-6180-4412-b746-61273c77587e
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-#= html"""<style>
-main {
-    max-width: 1000px;
-}
-""" =#
-  ╠═╡ =#
 
 # ╔═╡ 75b66ef5-972b-412b-aee5-d63791de9b7f
 begin
@@ -1107,11 +974,35 @@ end
 Base.:*(c::Number, f::LightField) = 
 	return LightField(f.λ, [c .* ϕ for ϕ ∈ f.ϕ])
 
+# ╔═╡ f50915b1-bb2f-455f-a49b-593cb7ca6222
+720/2*4.25
+
 # ╔═╡ ef1c75f7-f833-406b-84f1-672276b9f282
 begin
 	randomizephase(A::Matrix) = cis.(2π*rand(Float32, size(A))) .* A
 	randomizephase(lf::LightField) = LightField(lf.λ, randomizephase.(lf.ϕ))
 	randomizephase(pf::PhasorField) = PhasorField(randomizephase.(pf.ϕ))
+end
+
+# ╔═╡ 7628b409-86e2-41d6-ab82-62175eabaf49
+colormatch.(CIE2006_10_CMF, to_nm.((400:5:700)*nm))
+
+# ╔═╡ 47dde459-4cb4-4bf5-a4df-6c54b545d07c
+let
+	conversions = [
+		:CIE1931_CMF, :CIE1931J_CMF, :CIE1931JV_CMF,
+		:CIE1964_CMF, :CIE2006_2_CMF, :CIE2006_10_CMF
+	]
+	spectrum = colormatch.(CIE2006_10_CMF, to_nm.((400:5:700)*nm))
+	wl = 400:700
+	plots = []
+	for C in conversions
+		colors = colormatch.(eval(C), wl)
+		y = [q.y for q ∈ colors]
+		p = plot(wl, y, title=String(C), color=colors, width=10)
+		push!(plots, p)
+	end
+	out = plot(layout=@layout[a b; c d; e f], plots..., legend=false)
 end
 
 # ╔═╡ 8bc690fa-409a-11eb-0f03-cf55800897bb
@@ -1242,6 +1133,19 @@ begin
 	allowslow(AFArray, false)
 	
 	md"## ArrayFire extensions"
+end
+
+# ╔═╡ 0040ae65-fd55-447d-bc18-83eeec1c9492
+begin
+	dx = 4.25u"µm"
+
+	Nx, Ny = 1280, 720
+	Lx, Ly = dx.* (Nx, Ny)
+
+	X = range(-Lx/2, Lx/2, Nx)
+	Y = range(-Ly/2, Ly/2, Ny)
+
+	X, Y = meshgrid(X, Y)
 end
 
 # ╔═╡ 9e296c81-2438-4c84-9be3-7c64ea1634b1
@@ -1645,8 +1549,8 @@ begin
 	if initialized 			# ensure packages have been loaded and core methods defined
 		# wavelengths to be used for three-color imaging
 		# λR, λG, λB = 640.0nm, 532.8nm, 460.0nm
-		λR, λG, λB = 638.0nm, 527.0nm, 477.0nm  # wavelengths from a scanning laser projector
-		λG = (λR + λB)/2
+		λR, λG, λB = 638.0nm, 532.0nm, 460.0nm  # wavelengths from a scanning laser projector
+		# λG = (λR + λB)/2
 		
 		# wavenumbers corresponding to colors
 		kR, kG, kB = 2π ./ (λR, λG, λB)
@@ -1716,6 +1620,23 @@ let
 	| | pixel pitch: $(uconvert(u"µm", propL*1mm/N)) | |
 	"""
 end
+
+# ╔═╡ 7e003a22-ed86-4e13-8a52-66609a7e8c15
+md"""
+!!! note
+
+    Wavelengths are mapped to colors in XYZ space and thence to RGB for display. See 
+
+| Red | Green | Blue |
+| :--: | :--: | :--: |
+| $(RGB(colormatch(to_nm(λR)))) | $(RGB(colormatch(to_nm(λG)))) | $(RGB(colormatch(to_nm(λB)))) |
+| $(λR) | $(λG) | $(λB) |
+
+!!! note 
+
+    See `Base.show(::LightField, ...)` methods defined above for details on how `LightField` objects are displayed using this mapping.
+
+"""
 
 # ╔═╡ bc55d354-8ee0-4fe1-92b7-967cdb51dc2e
 begin
@@ -2090,49 +2011,6 @@ begin
 	"""
 
 	md"## Obsolete RGB waveoptics (for reference)"
-end
-
-# ╔═╡ 6ca9a99a-8f25-47ec-bce5-3f847570879c
-md"""
-## Mapping wavelengths to XYZ colorspace
-"""
-
-# ╔═╡ 7e003a22-ed86-4e13-8a52-66609a7e8c15
-md"""
-!!! note
-
-    Wavelengths are mapped to colors in XYZ space and thence to RGB for display. See 
-
-| Red | Green | Blue |
-| :--: | :--: | :--: |
-| $(RGB(colormatch(to_nm(λR)))) | $(RGB(colormatch(to_nm(λG)))) | $(RGB(colormatch(to_nm(λB)))) |
-| $(λR) | $(λG) | $(λB) |
-
-!!! note 
-
-    See `Base.show(::LightField, ...)` methods defined above for details on how `LightField` objects are displayed using this mapping.
-
-"""
-
-# ╔═╡ 7628b409-86e2-41d6-ab82-62175eabaf49
-colormatch.(CIE2006_10_CMF, to_nm.((400:5:700)*nm))
-
-# ╔═╡ 47dde459-4cb4-4bf5-a4df-6c54b545d07c
-let
-	conversions = [
-		:CIE1931_CMF, :CIE1931J_CMF, :CIE1931JV_CMF,
-		:CIE1964_CMF, :CIE2006_2_CMF, :CIE2006_10_CMF
-	]
-	spectrum = colormatch.(CIE2006_10_CMF, to_nm.((400:5:700)*nm))
-	wl = 400:700
-	plots = []
-	for C in conversions
-		colors = colormatch.(eval(C), wl)
-		y = [q.y for q ∈ colors]
-		p = plot(wl, y, title=String(C), color=colors, width=10)
-		push!(plots, p)
-	end
-	out = plot(layout=@layout[a b; c d; e f], plots..., legend=false)
 end
 
 # ╔═╡ 5992a716-65e6-4d55-981e-efbe88ccf8ba
@@ -2562,19 +2440,19 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [compat]
 ArrayFire = "~1.0.7"
 BenchmarkTools = "~1.5.0"
-Colors = "~0.12.10"
+Colors = "~0.12.11"
 DSP = "~0.6.10"
 FFTW = "~1.8.0"
 FileIO = "~1.16.3"
 FourierTools = "~0.4.3"
-HTTP = "~1.10.6"
+HTTP = "~1.10.8"
 HypertextLiteral = "~0.9.5"
-ImageIO = "~0.6.7"
+ImageIO = "~0.6.8"
 ImageShow = "~0.3.8"
 Images = "~0.26.1"
 JSON = "~0.21.4"
 JpegTurbo = "~0.1.5"
-LazyGrids = "~0.5.0"
+LazyGrids = "~1.0.0"
 MosaicViews = "~0.3.4"
 PlotlyJS = "~0.18.13"
 Plots = "~1.40.4"
@@ -2585,7 +2463,7 @@ QuartzImageIO = "~0.7.5"
 StatsBase = "~0.34.3"
 TestImages = "~1.8.0"
 TimerOutputs = "~0.5.23"
-Unitful = "~1.19.0"
+Unitful = "~1.19.1"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -2795,9 +2673,9 @@ version = "0.7.4"
 
 [[ColorSchemes]]
 deps = ["ColorTypes", "ColorVectorSpace", "Colors", "FixedPointNumbers", "PrecompileTools", "Random"]
-git-tree-sha1 = "67c1f244b991cad9b0aa4b7540fb758c2488b129"
+git-tree-sha1 = "4b270d6465eb21ae89b732182c20dc165f8bf9f2"
 uuid = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
-version = "3.24.0"
+version = "3.25.0"
 
 [[ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
@@ -2817,9 +2695,9 @@ weakdeps = ["SpecialFunctions"]
 
 [[Colors]]
 deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
-git-tree-sha1 = "fc08e5930ee9a4e03f84bfb5211cb54e7769758a"
+git-tree-sha1 = "362a287c3aa50601b0bc359053d5c2468f0e7ce0"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
-version = "0.12.10"
+version = "0.12.11"
 
 [[CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
@@ -2829,9 +2707,9 @@ version = "0.3.0"
 
 [[Compat]]
 deps = ["TOML", "UUIDs"]
-git-tree-sha1 = "c955881e3c981181362ae4088b35995446298b80"
+git-tree-sha1 = "b1c55339b7c6c350ee89f2c1604299660525b248"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "4.14.0"
+version = "4.15.0"
 weakdeps = ["Dates", "LinearAlgebra"]
 
     [Compat.extensions]
@@ -2992,9 +2870,9 @@ version = "0.1.10"
 
 [[Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "4558ab818dcceaab612d1bb8c19cee87eda2b83c"
+git-tree-sha1 = "1c6317308b9dc757616f0b5cb379db10494443a7"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.5.0+0"
+version = "2.6.2+0"
 
 [[ExprTools]]
 git-tree-sha1 = "27415f162e6028e81c72b82ef756bf321213b6ec"
@@ -3054,15 +2932,15 @@ uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[FixedPointNumbers]]
 deps = ["Statistics"]
-git-tree-sha1 = "335bfdceacc84c5cdf16aadc768aa5ddfc5383cc"
+git-tree-sha1 = "05882d6995ae5c12bb5f36dd2ed3f61c98cbb172"
 uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
-version = "0.8.4"
+version = "0.8.5"
 
 [[Fontconfig_jll]]
-deps = ["Artifacts", "Bzip2_jll", "Expat_jll", "FreeType2_jll", "JLLWrappers", "Libdl", "Libuuid_jll", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "21efd19106a55620a188615da6d3d06cd7f6ee03"
+deps = ["Artifacts", "Bzip2_jll", "Expat_jll", "FreeType2_jll", "JLLWrappers", "Libdl", "Libuuid_jll", "Zlib_jll"]
+git-tree-sha1 = "db16beca600632c95fc8aca29890d83788dd8b23"
 uuid = "a3f928ae-7b40-5064-980b-68af3947d34b"
-version = "2.13.93+0"
+version = "2.13.96+0"
 
 [[Format]]
 git-tree-sha1 = "9c68794ef81b08086aeb32eeaf33531668d5f5fc"
@@ -3092,10 +2970,10 @@ uuid = "d7e528f0-a631-5988-bf34-fe36492bcfd7"
 version = "2.13.1+0"
 
 [[FriBidi_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "aa31987c2ba8704e23c6c8ba8a4f769d5d7e4f91"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "1ed150b39aebcc805c26b93a8d0122c940f64ce2"
 uuid = "559328eb-81f9-559d-9380-de523a88c83c"
-version = "1.0.10+0"
+version = "1.0.14+0"
 
 [[FunctionalCollections]]
 deps = ["Test"]
@@ -3139,9 +3017,9 @@ version = "9.55.0+4"
 
 [[Glib_jll]]
 deps = ["Artifacts", "Gettext_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libiconv_jll", "Libmount_jll", "PCRE2_jll", "Zlib_jll"]
-git-tree-sha1 = "359a1ba2e320790ddbe4ee8b4d54a305c0ea2aff"
+git-tree-sha1 = "7c82e6a6cd34e9d935e9aa4051b66c6ff3af59ba"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
-version = "2.80.0+0"
+version = "2.80.2+0"
 
 [[Graphics]]
 deps = ["Colors", "LinearAlgebra", "NaNMath"]
@@ -3157,9 +3035,9 @@ version = "1.3.14+0"
 
 [[Graphs]]
 deps = ["ArnoldiMethod", "Compat", "DataStructures", "Distributed", "Inflate", "LinearAlgebra", "Random", "SharedArrays", "SimpleTraits", "SparseArrays", "Statistics"]
-git-tree-sha1 = "3863330da5466410782f2bffc64f3d505a6a8334"
+git-tree-sha1 = "4f2b57488ac7ee16124396de4f2bbdd51b2602ad"
 uuid = "86223c79-3864-5bf0-83f7-82e725a168b6"
-version = "1.10.0"
+version = "1.11.0"
 
 [[Grisu]]
 git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
@@ -3168,9 +3046,9 @@ version = "1.0.2"
 
 [[HTTP]]
 deps = ["Base64", "CodecZlib", "ConcurrentUtilities", "Dates", "ExceptionUnwrapping", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
-git-tree-sha1 = "2c3ec1f90bb4a8f7beafb0cffea8a4c3f4e636ab"
+git-tree-sha1 = "d1d712be3164d61d1fb98e7ce9bcbc6cc06b45ed"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "1.10.6"
+version = "1.10.8"
 
 [[HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
@@ -3269,9 +3147,9 @@ version = "0.7.8"
 
 [[ImageIO]]
 deps = ["FileIO", "IndirectArrays", "JpegTurbo", "LazyModules", "Netpbm", "OpenEXR", "PNGFiles", "QOI", "Sixel", "TiffImages", "UUIDs"]
-git-tree-sha1 = "bca20b2f5d00c4fbc192c3212da8fa79f4688009"
+git-tree-sha1 = "437abb322a41d527c197fa800455f79d414f0a3c"
 uuid = "82e4d734-157c-48bb-816b-45c225c6df19"
-version = "0.6.7"
+version = "0.6.8"
 
 [[ImageMagick]]
 deps = ["FileIO", "ImageCore", "ImageMagick_jll", "InteractiveUtils"]
@@ -3329,9 +3207,9 @@ version = "0.26.1"
 
 [[Imath_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "3d09a9f60edf77f8a4d99f9e015e8fbf9989605d"
+git-tree-sha1 = "0936ba688c6d201805a83da835b55c61a180db52"
 uuid = "905a6f67-0a94-5f89-b386-d35d92009cd1"
-version = "3.1.7+0"
+version = "3.1.11+0"
 
 [[IndexFunArrays]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -3420,9 +3298,9 @@ version = "1.0.0"
 
 [[JLD2]]
 deps = ["FileIO", "MacroTools", "Mmap", "OrderedCollections", "Pkg", "PrecompileTools", "Printf", "Reexport", "Requires", "TranscodingStreams", "UUIDs"]
-git-tree-sha1 = "5ea6acdd53a51d897672edb694e3cc2912f3f8a7"
+git-tree-sha1 = "dca9ff5abdf5fab4456876bc93f80c59a37b81df"
 uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-version = "0.4.46"
+version = "0.4.47"
 
 [[JLFzf]]
 deps = ["Pipe", "REPL", "Random", "fzf_jll"]
@@ -3456,9 +3334,9 @@ version = "0.1.5"
 
 [[JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "3336abae9a713d2210bb57ab484b1e065edd7d23"
+git-tree-sha1 = "c84a835e1a09b289ffcd2271bf2a337bbdda6637"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
-version = "3.0.2+0"
+version = "3.0.3+0"
 
 [[JuliaInterpreter]]
 deps = ["CodeTracking", "InteractiveUtils", "Random", "UUIDs"]
@@ -3479,10 +3357,10 @@ uuid = "f7e6163d-2fa5-5f23-b69c-1db539e41963"
 version = "0.2.1+0"
 
 [[LAME_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "170b660facf5df5de098d866564877e119141cbd"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
-version = "3.100.1+0"
+version = "3.100.2+0"
 
 [[LERC_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -3497,10 +3375,10 @@ uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
 version = "15.0.7+0"
 
 [[LZO_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "e5b909bcf985c5e2605737d2ce278ed791b89be6"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "70c5da094887fd2cae843b8db33920bac4b6f07d"
 uuid = "dd4b983a-f0e5-5f8d-a1b7-129d4a5fb1ac"
-version = "2.10.1+0"
+version = "2.10.2+0"
 
 [[LaTeXStrings]]
 git-tree-sha1 = "50901ebc375ed41dbf8058da26f9de442febbbec"
@@ -3539,9 +3417,9 @@ uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
 
 [[LazyGrids]]
 deps = ["Statistics"]
-git-tree-sha1 = "f43d10fea7e448a60e92976bbd8bfbca7a6e5d09"
+git-tree-sha1 = "1f1bf025f03f644e6c18f458db813fe2e3a68b5d"
 uuid = "7031d0ef-c40d-4431-b2f8-61a8d2f650db"
-version = "0.5.0"
+version = "1.0.0"
 
 [[LazyModules]]
 git-tree-sha1 = "a560dd966b386ac9ae60bdd3a3d3a326062d3c3e"
@@ -3594,10 +3472,10 @@ uuid = "7e76a0d4-f3c7-5321-8279-8d96eeed0f29"
 version = "1.6.0+0"
 
 [[Libgpg_error_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "c333716e46366857753e273ce6a69ee0945a6db9"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "fbb1f2bef882392312feb1ede3615ddc1e9b99ed"
 uuid = "7add5ba3-2f88-524e-9cd5-f83b8a55f7b8"
-version = "1.42.0+0"
+version = "1.49.0+0"
 
 [[Libiconv_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -3607,9 +3485,9 @@ version = "1.17.0+0"
 
 [[Libmount_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "4b683b19157282f50bfd5dcaa2efe5295814ea22"
+git-tree-sha1 = "0c4f9c4f1a50d8f35048fa0532dabbadf702f81e"
 uuid = "4b2f31a3-9ecc-558c-b454-b3730dcb73e9"
-version = "2.40.0+0"
+version = "2.40.1+0"
 
 [[Libtiff_jll]]
 deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
@@ -3619,9 +3497,9 @@ version = "4.4.0+0"
 
 [[Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "27fd5cc10be85658cacfe11bb81bee216af13eda"
+git-tree-sha1 = "5ee6203157c120d79034c748a2acba45b82b8807"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
-version = "2.40.0+0"
+version = "2.40.1+0"
 
 [[LinearAlgebra]]
 deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
@@ -3850,9 +3728,9 @@ version = "0.3.2"
 
 [[OpenEXR_jll]]
 deps = ["Artifacts", "Imath_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "a4ca623df1ae99d09bc9868b008262d0c0ac1e4f"
+git-tree-sha1 = "8292dd5c8a38257111ada2174000a33745b06d4e"
 uuid = "18a262bb-aa17-5467-a713-aee519bc75cb"
-version = "3.1.4+0"
+version = "3.2.4+0"
 
 [[OpenJpeg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libtiff_jll", "LittleCMS_jll", "Pkg", "libpng_jll"]
@@ -3936,9 +3814,9 @@ version = "1.3.0"
 
 [[Pixman_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LLVMOpenMP_jll", "Libdl"]
-git-tree-sha1 = "64779bc4c9784fee475689a1752ef4d5747c5e87"
+git-tree-sha1 = "35621f10a7531bc8fa58f74610b1bfb70a3cfc6b"
 uuid = "30392449-352a-5448-841d-b1acce4e97dc"
-version = "0.42.2+0"
+version = "0.43.4+0"
 
 [[Pkg]]
 deps = ["Artifacts", "Dates", "Downloads", "FileWatching", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "Serialization", "TOML", "Tar", "UUIDs", "p7zip_jll"]
@@ -4194,6 +4072,12 @@ weakdeps = ["RecipesBase"]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
 
+[[SIMD]]
+deps = ["PrecompileTools"]
+git-tree-sha1 = "2803cab51702db743f3fda07dd1745aadfbf43bd"
+uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
+version = "3.5.0"
+
 [[SIMDDualNumbers]]
 deps = ["ForwardDiff", "IfElse", "SLEEFPirates", "VectorizationBase"]
 git-tree-sha1 = "dd4195d308df24f33fb10dde7c22103ba88887fa"
@@ -4403,10 +4287,10 @@ uuid = "8290d209-cae3-49c0-8002-c8c24d57dab5"
 version = "0.4.7"
 
 [[TiffImages]]
-deps = ["ColorTypes", "DataStructures", "DocStringExtensions", "FileIO", "FixedPointNumbers", "IndirectArrays", "Inflate", "Mmap", "OffsetArrays", "PkgVersion", "ProgressMeter", "UUIDs"]
-git-tree-sha1 = "34cc045dd0aaa59b8bbe86c644679bc57f1d5bd0"
+deps = ["ColorTypes", "DataStructures", "DocStringExtensions", "FileIO", "FixedPointNumbers", "IndirectArrays", "Inflate", "Mmap", "OffsetArrays", "PkgVersion", "ProgressMeter", "SIMD", "UUIDs"]
+git-tree-sha1 = "bc7fd5c91041f44636b2c134041f7e5263ce58ae"
 uuid = "731e570b-9d59-4bfa-96dc-6df516fadf69"
-version = "0.6.8"
+version = "0.10.0"
 
 [[TiledIteration]]
 deps = ["ArrayInterface", "OffsetArrays"]
@@ -4431,9 +4315,9 @@ uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 version = "0.5.23"
 
 [[TranscodingStreams]]
-git-tree-sha1 = "71509f04d045ec714c4748c785a59045c3736349"
+git-tree-sha1 = "5d54d076465da49d6746c647022f3b3674e64156"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
-version = "0.10.7"
+version = "0.10.8"
 weakdeps = ["Random", "Test"]
 
     [TranscodingStreams.extensions]
@@ -4489,9 +4373,9 @@ version = "0.4.1"
 
 [[Unitful]]
 deps = ["Dates", "LinearAlgebra", "Random"]
-git-tree-sha1 = "3c793be6df9dd77a0cf49d80984ef9ff996948fa"
+git-tree-sha1 = "352edac1ad17e018186881b051960bfca78a075a"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
-version = "1.19.0"
+version = "1.19.1"
 
     [Unitful.extensions]
     ConstructionBaseUnitfulExt = "ConstructionBase"
@@ -4591,10 +4475,10 @@ uuid = "a3789734-cfe1-5b06-b2d0-1dd0d9d62d05"
 version = "1.1.4+0"
 
 [[Xorg_libXext_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
-git-tree-sha1 = "b7c0aa8c376b31e4852b360222848637f481f8c3"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libX11_jll"]
+git-tree-sha1 = "d2d1a5c49fae4ba39983f63de6afcbea47194e85"
 uuid = "1082639a-0dae-5f34-9b06-72781eeb8cb3"
-version = "1.3.4+4"
+version = "1.3.6+0"
 
 [[Xorg_libXfixes_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
@@ -4621,10 +4505,10 @@ uuid = "ec84b674-ba8e-5d96-8ba1-2a689ba10484"
 version = "1.5.2+4"
 
 [[Xorg_libXrender_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Xorg_libX11_jll"]
-git-tree-sha1 = "19560f30fd49f4d4efbe7002a1037f8c43d43b96"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libX11_jll"]
+git-tree-sha1 = "47e45cd78224c53109495b3e324df0c37bb61fbe"
 uuid = "ea2f1a96-1ddc-540d-b46f-429655e07cfa"
-version = "0.9.10+4"
+version = "0.9.11+0"
 
 [[Xorg_libpthread_stubs_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -4808,8 +4692,10 @@ version = "1.4.1+1"
 # ╠═b8cdde01-ebc8-4a84-96aa-8bad2264a5ab
 # ╠═9e994b57-876a-43da-b479-519737dda20b
 # ╟─e2482eb4-2bbd-4fef-9572-16287f0d11de
+# ╠═86b09375-59db-478b-806c-dbb5d2df7817
 # ╟─4f761eb7-0428-4ace-bd52-c1e30f169e5a
 # ╠═a3eeaff1-1f98-4b9e-ace9-2d3a5c0110bf
+# ╠═f50915b1-bb2f-455f-a49b-593cb7ca6222
 # ╠═35cbfad7-825d-4961-b24d-56f8cb70a513
 # ╠═57e9ca9d-9427-40bd-8945-3c9f64dd600a
 # ╠═2f5afb7c-8b1c-4592-bf2a-4259030a1009
@@ -4817,6 +4703,9 @@ version = "1.4.1+1"
 # ╟─36127489-a94e-4ca8-afd1-4db7575a0b81
 # ╟─70ad1a78-ddf2-41bb-b488-e64c6acc5e5d
 # ╟─e44a420c-7355-46a9-a87b-754bb15c6483
+# ╟─2bb0d5cd-70aa-4707-9636-fdd226987571
+# ╠═91a97369-e493-4ef7-9b84-f55b02fe084e
+# ╠═0040ae65-fd55-447d-bc18-83eeec1c9492
 # ╟─95e08cb9-bda6-4ac9-8c30-65f3228efa2c
 # ╟─98b5c944-20fd-481f-a945-fc8cd997e9aa
 # ╟─b1987990-4097-11eb-0b47-a5a4066542c3
@@ -4838,13 +4727,16 @@ version = "1.4.1+1"
 # ╟─81f6131a-84f5-42b9-af6a-5eb35e459efe
 # ╟─ef1c75f7-f833-406b-84f1-672276b9f282
 # ╟─f4527ccf-ffcc-402f-b22d-542e2efdb75a
+# ╠═7e003a22-ed86-4e13-8a52-66609a7e8c15
+# ╠═6ca9a99a-8f25-47ec-bce5-3f847570879c
+# ╠═7628b409-86e2-41d6-ab82-62175eabaf49
+# ╟─47dde459-4cb4-4bf5-a4df-6c54b545d07c
 # ╟─d5719963-e960-499a-bc36-d258d829ada0
-# ╟─11725909-3a35-485b-8295-098917ef4c92
-# ╟─bc55d354-8ee0-4fe1-92b7-967cdb51dc2e
-# ╟─59abdc6e-eff9-490d-be7a-1808a6a8c808
-# ╟─16253161-0e9c-4b5d-bf81-0dd2a35812a8
-# ╟─3207f15d-aaf6-4f57-b8a0-c8f7c83293a3
-# ╟─75870b96-527b-49c7-9b11-05f12be34a56
+# ╠═11725909-3a35-485b-8295-098917ef4c92
+# ╠═bc55d354-8ee0-4fe1-92b7-967cdb51dc2e
+# ╠═16253161-0e9c-4b5d-bf81-0dd2a35812a8
+# ╠═3207f15d-aaf6-4f57-b8a0-c8f7c83293a3
+# ╠═75870b96-527b-49c7-9b11-05f12be34a56
 # ╟─abb11bb2-876a-49b3-866c-4b3b9e8fc7f5
 # ╟─51a7dbdc-af5a-4c6e-a406-cd98fb96d464
 # ╟─a0230cb0-3536-4d9e-beb9-9dcf5e38700a
@@ -4854,51 +4746,42 @@ version = "1.4.1+1"
 # ╟─64c5375b-0bab-45c9-bdaf-223a7b77ede2
 # ╟─0cf2d97d-9ad0-40a8-8807-8e3cccaa25db
 # ╟─79bdf5b6-76dd-40ea-a713-ac394ca53b4c
-# ╟─2bf78920-2e25-4b42-823c-2874a4d8c3cb
-# ╟─5f80f6de-6041-456d-a2a6-7ce741779691
-# ╟─01a1aeb2-b136-49de-a48f-fc7a7a3b143a
-# ╟─121dae3d-6731-4207-bb51-e9e79f0d93f8
-# ╟─173bbd6a-16eb-473a-8aaa-5efb92150124
-# ╟─0ce01c4b-fe97-4208-995a-beb2f8e98e23
-# ╟─b034e3e2-4b52-4655-ac7c-756c0f45da12
-# ╟─4d071a23-a75b-4415-8903-77ee4bec3dd0
+# ╠═2bf78920-2e25-4b42-823c-2874a4d8c3cb
+# ╠═5f80f6de-6041-456d-a2a6-7ce741779691
+# ╠═01a1aeb2-b136-49de-a48f-fc7a7a3b143a
+# ╠═121dae3d-6731-4207-bb51-e9e79f0d93f8
+# ╠═173bbd6a-16eb-473a-8aaa-5efb92150124
+# ╠═0ce01c4b-fe97-4208-995a-beb2f8e98e23
+# ╠═b034e3e2-4b52-4655-ac7c-756c0f45da12
+# ╠═4d071a23-a75b-4415-8903-77ee4bec3dd0
 # ╠═34028967-3c01-49f2-877e-7d557873689c
 # ╟─0c72b231-1bbe-4066-bd64-5f5d963d1d98
-# ╟─069947d4-c67f-4039-95d7-6049aa415847
-# ╟─5adb649d-0165-4503-bc51-1f876573a1a4
-# ╟─35d55d37-559d-4606-bb8a-209a29798ce2
-# ╟─9e296c81-2438-4c84-9be3-7c64ea1634b1
-# ╟─93b85f08-36c1-480f-9057-0f1ca65d99c4
+# ╠═069947d4-c67f-4039-95d7-6049aa415847
+# ╠═5adb649d-0165-4503-bc51-1f876573a1a4
+# ╠═35d55d37-559d-4606-bb8a-209a29798ce2
+# ╠═9e296c81-2438-4c84-9be3-7c64ea1634b1
+# ╠═93b85f08-36c1-480f-9057-0f1ca65d99c4
 # ╟─6e9b127b-7bcd-43b7-9571-2e4a52600c66
 # ╠═06d42379-e45e-4082-9b9e-2386c224a313
-# ╟─f8e8cdf3-3b8b-48c6-9476-84acb3cfb808
+# ╠═f8e8cdf3-3b8b-48c6-9476-84acb3cfb808
 # ╟─edcaf4f8-77f5-4ceb-8370-6490c2b825f3
-# ╟─52debc73-6c49-4eb8-b83a-1c643ee48bb4
-# ╟─d9b4bf70-c032-4fea-9f8f-a0716cf04767
-# ╟─9a6f26c4-35f9-4627-aee2-3f7641ba2138
-# ╟─12bd7c0d-063a-4d1a-925e-868e625123a4
-# ╟─7b8609ac-8198-48f9-8b43-79f577668527
-# ╟─0379641b-62e7-4118-be6d-4af457481a90
+# ╠═52debc73-6c49-4eb8-b83a-1c643ee48bb4
+# ╠═d9b4bf70-c032-4fea-9f8f-a0716cf04767
+# ╠═9a6f26c4-35f9-4627-aee2-3f7641ba2138
+# ╠═12bd7c0d-063a-4d1a-925e-868e625123a4
+# ╠═7b8609ac-8198-48f9-8b43-79f577668527
+# ╠═0379641b-62e7-4118-be6d-4af457481a90
 # ╟─c864f046-3f0b-11eb-3973-4f53d2419f30
 # ╠═a5816c6c-3fc4-11eb-3356-e19b884ebb0d
-# ╟─bb9a52ae-8929-4656-a985-15bad69216f8
-# ╟─73918b6a-60bd-4c57-8963-d9a6da3c2d38
-# ╟─f41607f8-cd04-4937-8c59-c952221f9112
-# ╟─5ac55af9-b174-44e8-a9fa-8790c20bd0be
-# ╟─20f5da3a-6180-4412-b746-61273c77587e
-# ╟─60218002-f04c-4b35-8d72-7228338a665a
-# ╟─75b66ef5-972b-412b-aee5-d63791de9b7f
-# ╟─bc851704-6b05-4398-8152-2955fed0a704
-# ╟─bf6b94ea-4caa-419f-a166-ffeb9d311a9e
-# ╟─6c42ea7c-d1ed-445c-bb6c-0c23f1a63dab
-# ╟─449a1328-e17d-4d1a-9a85-384d4fe801b4
-# ╟─81d2d4d8-489f-4cb3-8bbf-387e9a577148
-# ╟─8bc690fa-409a-11eb-0f03-cf55800897bb
-# ╟─a9c30e06-a931-4dfe-90ab-bacd5d532159
-# ╟─6ca9a99a-8f25-47ec-bce5-3f847570879c
-# ╟─7e003a22-ed86-4e13-8a52-66609a7e8c15
-# ╠═7628b409-86e2-41d6-ab82-62175eabaf49
-# ╟─47dde459-4cb4-4bf5-a4df-6c54b545d07c
+# ╠═60218002-f04c-4b35-8d72-7228338a665a
+# ╠═75b66ef5-972b-412b-aee5-d63791de9b7f
+# ╠═bc851704-6b05-4398-8152-2955fed0a704
+# ╠═bf6b94ea-4caa-419f-a166-ffeb9d311a9e
+# ╠═6c42ea7c-d1ed-445c-bb6c-0c23f1a63dab
+# ╠═449a1328-e17d-4d1a-9a85-384d4fe801b4
+# ╠═81d2d4d8-489f-4cb3-8bbf-387e9a577148
+# ╠═8bc690fa-409a-11eb-0f03-cf55800897bb
+# ╠═a9c30e06-a931-4dfe-90ab-bacd5d532159
 # ╟─5992a716-65e6-4d55-981e-efbe88ccf8ba
 # ╟─91c66b4d-029d-45d9-a992-1a05db6ae0ac
 # ╟─a72c6eba-4c1e-44f0-b9c2-c9bfabd43106
