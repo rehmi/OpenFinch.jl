@@ -45,6 +45,7 @@ begin
 	using ImageShow
 	using MosaicViews
 	using Random
+	using VideoIO
 
 	using FourierTools: resample  # override DSP.resample
 	using DSP: conv
@@ -117,7 +118,7 @@ md"""
 | analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
 | LED width | $(@bind LED_WIDTH Slider(0:1:2700, default=200, show_value=true)) |
 | LED time | $(@bind LED_TIME Slider(0:1:8000, default=50, show_value=true)) |
-| Focal length | $(@bind f Slider(0:1:400, default=55, show_value=true)) |
+| Focal length | $(@bind f Slider(0:1:500, default=55, show_value=true)) |
 | Fine focus | $(@bind df Slider(-1:0.001:1, default=0, show_value=true)) |
 | X offset | $(@bind xoff Slider(-50:1:50, default=-8, show_value=true)) |
 | Y offset | $(@bind yoff Slider(-50:1:50, default=0, show_value=true)) |
@@ -132,14 +133,12 @@ md"""
 # ╔═╡ a58c5e86-b282-43a7-b74a-7dc8f1e49976
 begin
 	color_chart = load("../data/color_reschart02.png");
+	usaf_chart = load("../data/USAF512.png")
 	mono_chart = testimage("resolution_test_512");
 	cameraman = testimage("cameraman");
 	mandrill = testimage("mandrill");
-	img = rot180(imresize(mono_chart, ratio=image_scale))
+	nothing
 end
-
-# ╔═╡ 237bd8ad-49d8-4059-b4a0-729a051d93db
-typeof(mono_chart)
 
 # ╔═╡ 5236f897-79ed-46f2-8b51-4aa5a0d78dec
 begin
@@ -147,18 +146,6 @@ begin
 	ColorTypes.green(x::Gray) = x
 	ColorTypes.blue(x::Gray) = x
 end
-
-# ╔═╡ a7d722af-a962-40a2-ae89-e4e520b88fd2
-ϕ_rand = exp.(2im*π*rand(size(img)...));
-
-# ╔═╡ 693a5636-387b-42bf-a130-3111825e11e4
-iR = Float32.(red.(img)) .* ϕ_rand;
-
-# ╔═╡ 2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
-iG = Float32.(green.(img)) .* ϕ_rand;
-
-# ╔═╡ 058d33db-7b24-42a3-930f-f3ee24b6b113
-iB = Float32.(blue.(img)) .* ϕ_rand;
 
 # ╔═╡ 7d12e54d-5cad-4259-a742-c7b8448b4470
 function extract_central(matrix::Matrix, dims::Tuple{Int, Int})
@@ -180,7 +167,7 @@ begin
 	# λs = (630, 530, 450) .* u"nm"
 	# λs = (λR, λG, λB) .* u"nm"
 
-	Nx, Ny = 2048, 2048
+	Nx, Ny = (1,1) .* 2^13
 	Lx, Ly = dx.* (Nx, Ny)
 
 	grid = meshgrid(range(-Nx/2, Nx/2, Nx), range(-Ny/2, Ny/2, Ny))
@@ -203,39 +190,67 @@ R = sqrt.(fx2 .+ fy2 .+ Z^2);
 # ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
 ϕlensR = exp.(2π * 1im * R / ustrip(λR*u"nm"));
 
-# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
-ϕR = conv(iR, ϕlensR);
-
 # ╔═╡ 2177271e-fa25-48c1-9c11-67117ae3fde2
 ϕlensG = exp.(2π * 1im * R / ustrip(λG*u"nm"));
 
-# ╔═╡ ceb402ae-ab6b-400e-a481-9bd86a22bc1a
-ϕG = conv(iG, ϕlensG);
-
 # ╔═╡ 6c212ba1-c558-47ad-a621-7c4e653bab86
 ϕlensB = exp.(2π * 1im * R / ustrip(λB*u"nm"));
-
-# ╔═╡ dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
-ϕB = conv(iB, ϕlensB);
-
-# ╔═╡ 39570ba6-7602-4dd6-8827-b709b4a66628
-cgh = rot180(RGB.(
-	(real.(ϕR).>0),
-	(real.(ϕG).>0),
-	(real.(ϕB).>0)
-));
-
-# ╔═╡ 79667c43-705a-4c34-b073-f91eac682674
-slm_img = extract_central(cgh, (720, 1280))
-
-# ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
-ϕ = [ ϕR, ϕG, ϕB ];
 
 # ╔═╡ d4953849-16cb-4f3f-befe-57f1fc327735
 md"""
 ---
 # Definitions
 """
+
+# ╔═╡ 8d230e31-8b13-4c59-ac4d-1efc102a5623
+BA = load("../data/Touhou - Bad Apple.mp4");
+
+# ╔═╡ d57b63e3-6cc9-4f40-bb27-107b68efc909
+@bind frame Slider(1:length(BA), default=1684, show_value=true)
+
+# ╔═╡ 2b2dd536-a71a-4364-910c-9106628a094b
+begin
+	chart = reverse(imresize(usaf_chart, ratio=image_scale), dims=1);
+	ba = reverse(imresize(BA[frame], ratio=image_scale), dims=1);
+	img = chart
+end
+
+# ╔═╡ a7d722af-a962-40a2-ae89-e4e520b88fd2
+ϕ_rand = exp.(2π * im * rand(size(img)...));
+
+# ╔═╡ 693a5636-387b-42bf-a130-3111825e11e4
+iR = Float32.(red.(img)) .* ϕ_rand;
+
+# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
+ϕR = conv(iR, ϕlensR);
+
+# ╔═╡ 2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
+iG = Float32.(green.(img)) .* ϕ_rand;
+
+# ╔═╡ ceb402ae-ab6b-400e-a481-9bd86a22bc1a
+ϕG = conv(iG, ϕlensG);
+
+# ╔═╡ 058d33db-7b24-42a3-930f-f3ee24b6b113
+iB = Float32.(blue.(img)) .* ϕ_rand;
+
+# ╔═╡ dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
+ϕB = conv(iB, ϕlensB);
+
+# ╔═╡ 39570ba6-7602-4dd6-8827-b709b4a66628
+cgh = (RGB.(
+	(real.(ϕR).>0),
+	(real.(ϕG).>0),
+	(real.(ϕB).>0)
+));
+
+# ╔═╡ 79667c43-705a-4c34-b073-f91eac682674
+slm_img = extract_central(cgh, (720,1280))
+
+# ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
+ϕ = [ ϕR, ϕG, ϕB ];
+
+# ╔═╡ 74af8bce-af71-4e54-8627-926fbd33c7cc
+BA[frame]
 
 # ╔═╡ 7f1b4f21-d822-4860-94f4-4cb610a34e39
 begin
@@ -664,6 +679,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+VideoIO = "d6d074c3-1acf-5d4c-9a43-ef38773959a2"
 
 [compat]
 BenchmarkTools = "~1.5.0"
@@ -692,6 +708,7 @@ StatsBase = "~0.34.3"
 TestImages = "~1.8.0"
 TimerOutputs = "~0.5.23"
 Unitful = "~1.19.1"
+VideoIO = "~1.1.0"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -700,7 +717,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.3"
 manifest_format = "2.0"
-project_hash = "4b7da9b32779e2d18eb9ce819878c414e4d9d6a3"
+project_hash = "3a0de4811ceee55f90e68f7e6b8520dc4bc3104f"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1258,6 +1275,11 @@ deps = ["Artifacts", "Gettext_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libic
 git-tree-sha1 = "7c82e6a6cd34e9d935e9aa4051b66c6ff3af59ba"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
 version = "2.80.2+0"
+
+[[deps.Glob]]
+git-tree-sha1 = "97285bbd5230dd766e9ef6749b80fc617126d496"
+uuid = "c27321d9-0574-5035-807b-f59d2c89b15c"
+version = "1.3.1"
 
 [[deps.Graphics]]
 deps = ["Colors", "LinearAlgebra", "NaNMath"]
@@ -2649,6 +2671,12 @@ git-tree-sha1 = "6129a4faf6242e7c3581116fbe3270f3ab17c90d"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 version = "0.21.67"
 
+[[deps.VideoIO]]
+deps = ["ColorTypes", "Dates", "Downloads", "FFMPEG", "FFMPEG_jll", "FileIO", "Glob", "ImageCore", "PrecompileTools", "Scratch"]
+git-tree-sha1 = "4aaf8a88550d628b8142ed6772901fdf9cef55fd"
+uuid = "d6d074c3-1acf-5d4c-9a43-ef38773959a2"
+version = "1.1.0"
+
 [[deps.Wayland_jll]]
 deps = ["Artifacts", "EpollShim_jll", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg", "XML2_jll"]
 git-tree-sha1 = "7558e29847e99bc3f04d6569e82d0f5c54460703"
@@ -2932,7 +2960,9 @@ version = "1.4.1+1"
 # ╠═39570ba6-7602-4dd6-8827-b709b4a66628
 # ╟─b3441c7d-a097-435d-b1da-46869b9d2193
 # ╠═a58c5e86-b282-43a7-b74a-7dc8f1e49976
-# ╠═237bd8ad-49d8-4059-b4a0-729a051d93db
+# ╠═2b2dd536-a71a-4364-910c-9106628a094b
+# ╠═d57b63e3-6cc9-4f40-bb27-107b68efc909
+# ╠═74af8bce-af71-4e54-8627-926fbd33c7cc
 # ╠═5236f897-79ed-46f2-8b51-4aa5a0d78dec
 # ╠═a7d722af-a962-40a2-ae89-e4e520b88fd2
 # ╠═693a5636-387b-42bf-a130-3111825e11e4
@@ -2954,6 +2984,7 @@ version = "1.4.1+1"
 # ╠═ecb25ecf-1273-4ab4-a279-d826814c241d
 # ╟─d4953849-16cb-4f3f-befe-57f1fc327735
 # ╠═c10f6c81-bda1-443a-942c-6c0bcdab3c80
+# ╠═8d230e31-8b13-4c59-ac4d-1efc102a5623
 # ╟─5084973f-e4e4-4d43-a155-d848efce3f01
 # ╟─7f1b4f21-d822-4860-94f4-4cb610a34e39
 # ╟─cc316130-cf9e-4dd6-97ef-a114831644ad
