@@ -149,15 +149,15 @@ def start_pig(host="localhost", port=8888):
     return pig
 
 class PiGPIOWave:
-    def __init__(self, pig, config):
+    def __init__(self, pig, config, trigger_camera=True):
         self.pig = pig
         self.config = config
         # self.kwargs = config.__dict__
         self.wavegen = WaveGen()
-        self.id = self.generate_wave()
+        self.id = self.generate_wave(trigger_camera=trigger_camera)
 
     def __str__(self):
-        return f"PiGPIOWave{self.pig}, id={self.id})"
+        return f"PiGPIOWave{self.pig}, id={self.id}, id_trig={self.id_trig})"
     
     def __repr__(self):
         return self.__str__()
@@ -170,7 +170,7 @@ class PiGPIOWave:
             self.pig.wave_delete(self.id)
             self.id = -1
 
-    def generate_wave(self):
+    def generate_wave(self, trigger_camera=True):
         cf = self.config
         
         RED_WIDTH = int(cf.RED_FACTOR * cf.LED_WIDTH)
@@ -188,9 +188,10 @@ class PiGPIOWave:
         # self.wavegen.change_bit(cf.BLU_OUT, 0, 0)
         # self.wavegen.change_bit(cf.LED_OUT, 0, 0)
 
-        # Camera trigger puls
-        self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME)
-        self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH)
+        # Camera trigger pulse
+        if trigger_camera:
+            self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME)
+            self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH)
 
         # RED LED pulse
         self.wavegen.change_bit(cf.RED_OUT, 1, RED_TIME)
@@ -216,63 +217,97 @@ class PiGPIOWave:
         self.pig.wave_add_generic(wave)
         return self.pig.wave_create()
 
+class Sequencer:
+    def __init__(self, pig, config):
+        self.pig = pig
+        self.config = config
+        self.wave_RGB = PiGPIOWave(self.pig, self.config, trigger_camera=False)
+        self.wave_RGB_trig = PiGPIOWave(self.pig, self.config, trigger_camera=True)
+        self.initialize_gpio();
+        self.initialize_trigger();
 
-def trigger_wave_script(pig, config):
-    script = f"""
-    pads 0 16								# set pad drivers to 16 mA
+    def initialize_gpio(self):
+        cf = self.config
 
-    # we expect wave id in p0
-    lda {config.TRIG_IN} sta p1
-    lda {config.STROBE_IN} sta p2
+        for pin in [cf.TRIG_OUT, cf.RED_OUT, cf.GRN_OUT, cf.BLU_OUT]:
+            self.pig.set_mode(pin, pigpio.OUTPUT)
 
-    # ld p3 1				# status: starting
+        for pin in [cf.TRIG_IN, cf.RED_IN, cf.GRN_IN, cf.BLU_IN, cf.STROBE_IN]:
+            self.pig.set_mode(pin, pigpio.INPUT)
 
-tag 100
-    lda p0         		# load the current value of p0
-    or 0 jp 120    		# if p0 is valid (>=0), proceed
-    # ld p3 0				# status: sequencing paused
-	# changing the delay to <= 100 µs will increase pigpiod CPU use to > 100%
-    mics 101      		# otherwise delay for a bit
-    jmp 100       		# and try again
-    
-# 	ld p3 2 			# status: waiting for p2 low
-# tag 110
-# 	r p2 jnz 110		# wait if p2 is high
-# 	ld p3 3				# status: waiting for p2 high
-# tag 111
-# 	r p2 jz 111			# wait for rising edge of p2
+    def initialize_trigger(self):
+        self.script = self.trigger_wave_script(self.pig, self.config)
+        self.wave = PiGPIOWave(self.pig, self.config)
 
-    # ld p3 4				# status: sequencing started
-    # br1 sta v4			# capture starting GPIO in p4
-    # tick sta v5			# capture the start time in p5
+        # Wait for the script to finish initializing before starting it
+        while self.script.initing():
+            pass
+        self.script.start(self.wave.id)
 
-tag 120
-    r p1 jnz 121        # read the GPIO and jump out of loop if it's high
-    mics 101           	# otherwise delay for a bit
-    jmp 120            	# and continue polling
-tag 121
-    # tick sta v6			# capture trigger high time in p6
+    def stop_wave(self):
+        self.script.set_params(0xffffffff) # deactivate the current wave
+        self.wave.delete()
 
-    # ld p3 5
-tag 130
-    r p1 jnz 130		# wait for falling edge on p1
+    def set_delay(self, t_del):
+        self.config.LED_TIME = t_del
+        self.wave = PiGPIOWave(self.pig, self.config)
+        self.script.set_params(self.wave.id)
+        
+    def trigger_wave_script(self, pig, config):
+        script = f"""
+        pads 0 16								# set pad drivers to 16 mA
 
-    wvtx p0				# trigger the wave
-    # br1 sta v7			# capture GPIO at trigger low in p7
-    # tick sta v8			# capture trigger low time in p8
-    # ld p3 6				# status: wave tx started
+        # we expect RGB wave id in p0, RGB+trig wave id in p1
+        lda {config.TRIG_IN} sta p2
 
-tag 140
-	mics 101			# delay for a bit
-    wvbsy
-    jnz 140 			# wait for wave to finish
-    # tick sta v9			# capture wave finish time in p9
-    # ld p3 7				# status: wave tx complete
-    # ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
-    # ld p3 8				# status: return params updated 
+        # ld p9 1				# status: starting
 
-    jmp 100				# do it again
-    ret
-    """
+    tag 100
+        lda p0         		# load the current value of p0
+        or 0 jp 120    		# if p0 is valid (>=0), proceed
+        # ld p9 0				# status: sequencing paused
+        # changing the delay to <= 100 µs will increase pigpiod CPU use to > 100%
+        mics 101      		# otherwise delay for a bit
+        jmp 100       		# and try again
+        
+    # 	ld p9 2 			# status: waiting for p2 low
+    # tag 110
+    # 	r p2 jnz 110		# wait if p2 is high
+    # 	ld p9 3				# status: waiting for p2 high
+    # tag 111
+    # 	r p2 jz 111			# wait for rising edge of p2
 
-    return PiGPIOScript(pig, script)
+        # ld p9 4				# status: sequencing started
+        # br1 sta v4			# capture starting GPIO in p4
+        # tick sta v5			# capture the start time in p5
+
+    tag 120
+        r p2 jnz 121        # read the GPIO and jump out of loop if it's high
+        mics 101           	# otherwise delay for a bit
+        jmp 120            	# and continue polling
+    tag 121
+        # tick sta v6			# capture trigger high time in p6
+
+        # ld p9 5
+    tag 130
+        r p2 jnz 130		# wait for falling edge on p2
+
+        wvtx p0				# trigger the wave
+        # br1 sta v7			# capture GPIO at trigger low in p7
+        # tick sta v8			# capture trigger low time in p8
+        # ld p9 6				# status: wave tx started
+
+    tag 140
+        mics 101			# delay for a bit
+        wvbsy
+        jnz 140 			# wait for wave to finish
+        # tick sta v9			# capture wave finish time in p9
+        # ld p9 7				# status: wave tx complete
+        # ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
+        # ld p9 8				# status: return params updated 
+
+        jmp 100				# do it again
+        ret
+        """
+
+        return PiGPIOScript(pig, script)

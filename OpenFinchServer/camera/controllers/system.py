@@ -5,8 +5,8 @@ import os
 import pigpio
 
 from camera.utils.capture import CaptureController
-from gpio.sequencer import start_pig, trigger_wave_script, TriggerConfig
-from gpio.sequencer import PiGPIOScript, PiGPIOWave
+from gpio.sequencer import start_pig, TriggerConfig
+from gpio.sequencer import Sequencer
 from utils.frame_rate_monitor import FrameRateMonitor
 from camera.captures.abstract import AbstractCameraController
 
@@ -30,29 +30,10 @@ class SystemController:
         self.pig = start_pig()
         self.vidcap = CaptureController(camera_controller=self.camera_controller)
         self.vidcap.open()
-        self.initialize_gpio()
-        self.initialize_trigger()
+        self.sequencer = Sequencer(pig=self.pig, config=self.config)
 
     def set_capture_mode(self, mode):
         self.camera_controller.set_capture_mode(mode)
-
-    def initialize_gpio(self):
-        cf = self.config
-
-        for pin in [cf.TRIG_OUT, cf.RED_OUT, cf.GRN_OUT, cf.BLU_OUT]:
-            self.pig.set_mode(pin, pigpio.OUTPUT)
-
-        for pin in [cf.TRIG_IN, cf.RED_IN, cf.GRN_IN, cf.BLU_IN, cf.STROBE_IN]:
-            self.pig.set_mode(pin, pigpio.INPUT)
-
-    def initialize_trigger(self):
-        self.script = trigger_wave_script(self.pig, self.config)
-        self.wave = PiGPIOWave(self.pig, self.config)
-
-        # Wait for the script to finish initializing before starting it
-        while self.script.initing():
-            pass
-        self.script.start(self.wave.id)
 
     def __del__(self):
         self.shutdown()
@@ -106,19 +87,9 @@ class SystemController:
                 return None
             else:
                 return result[0]
-
-    def stop_wave(self):
-        self.script.set_params(0xffffffff) # deactivate the current wave
-        self.wave.delete()
-
-    def set_delay(self, t_del):
-        self.config.LED_TIME = t_del
-        self.wave = PiGPIOWave(self.pig, self.config)
-        self.script.set_params(self.wave.id)
-
     def update_wave(self):
-        self.stop_wave()
-        self.set_delay(self.config.LED_TIME)
+        self.sequencer.stop_wave()
+        self.sequencer.set_delay(self.config.LED_TIME)
 
     def set_cam_triggered(self):
         # XXX move this into the camera controller
