@@ -70,7 +70,7 @@ class SystemController:
             # logging.debug(f"CameraController shutting down wave: {e}")
             pass
 
-    def capture_frame(self, timeout=0):
+    def capture_frame(self, timeout=1):
         self.fps_logger.update()
         if timeout <= 0:
             return self.vidcap.capture_frame()
@@ -81,15 +81,20 @@ class SystemController:
                 result[0] = self.vidcap.capture_frame()
 
             thread = threading.Thread(target=target)
-            thread.start()
-            thread.join(timeout)
+            try:
+                thread.start()
+                thread.join(timeout)
+
+            except Exception as e:
+                pass
+            
             if thread.is_alive():
                 return None
             else:
                 return result[0]
+
     def update_wave(self):
-        self.sequencer.stop_wave()
-        self.sequencer.set_delay(self.config.LED_TIME)
+        self.sequencer.update_wave()
 
     def set_cam_triggered(self):
         # XXX move this into the camera controller

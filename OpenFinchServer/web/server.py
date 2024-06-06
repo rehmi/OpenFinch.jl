@@ -377,7 +377,7 @@ class CameraServer:
             if self.sweep_enable:
                 self.sysctrl.sweep()
                 await self.update_led_time(self.sysctrl.config.LED_TIME)
-            self.sysctrl.update_wave()
+                self.sysctrl.update_wave()
             # XXX end section to be factored out
 
             img_bin = frame.to_bytes()

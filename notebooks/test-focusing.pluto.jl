@@ -318,6 +318,12 @@ R = sqrt.(fx2 .+ fy2 .+ Z^2);
 # ╔═╡ 6c212ba1-c558-47ad-a621-7c4e653bab86
 ϕlensB = exp.(2f0π * 1im * R / Float32(ustrip(λB*u"nm")));
 
+# ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
+# ╠═╡ disabled = true
+#=╠═╡
+ϕ = [ ϕR, ϕG, ϕB ];
+  ╠═╡ =#
+
 # ╔═╡ b71d68e6-0b7c-4a1e-9ca9-5cd183b83f0e
 md"""
 ## Test Metal performance
@@ -406,12 +412,6 @@ iB = (blue.(img)) .* ϕ_rand[3];
 
 # ╔═╡ dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
 ϕB = conv(iB, ϕlensB);
-
-# ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
-# ╠═╡ disabled = true
-#=╠═╡
-ϕ = [ ϕR, ϕG, ϕB ];
-  ╠═╡ =#
 
 # ╔═╡ e23a55a1-13d8-446a-a66c-00b7af640d71
 
@@ -523,9 +523,6 @@ end
 # ╔═╡ 2537ce03-ddb0-4aab-a441-1531a5e6996d
 openfinch = OpenFinchConnection(URI)
 
-# ╔═╡ e3c2f4d1-1e14-4414-b623-594f55053b7a
-openfinch
-
 # ╔═╡ 98869068-79fb-42ee-9d21-d0c7f5a8ce1e
 put!(openfinch, Dict(
 	"use_base64_encoding"=>Dict("value"=>false),
@@ -576,7 +573,7 @@ send_controls(openfinch, Dict(
 	"LED_WIDTH" => LED_WIDTH,
 	"ColourGains" => [red_gain, blue_gain],
 	"AnalogueGain" => analog_gain,
-	"WAVE_DURATION" => round(Int, 8333*3.5),
+	# "WAVE_DURATION" => round(Int, 8333*3.5),
 	"ScalerCrop" => [3, 0, 1456, 1088]
 	# "ScalerCrop" => [0, 0, 64, 16]
 ));
@@ -927,7 +924,7 @@ VideoIO = "~1.1.0"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.3"
+julia_version = "1.10.4"
 manifest_format = "2.0"
 project_hash = "6b9af5a1aefb11807134a26209b03b90311bdd07"
 
@@ -3309,7 +3306,6 @@ version = "1.4.1+1"
 # ╟─ffcbbfe2-a8a0-474f-a1c8-b419bacc90e2
 # ╟─5c459507-67eb-41fd-9ce6-3cd489601064
 # ╠═2537ce03-ddb0-4aab-a441-1531a5e6996d
-# ╠═e3c2f4d1-1e14-4414-b623-594f55053b7a
 # ╠═b1dc96c5-67dd-4ab1-a036-fb17c7570b56
 # ╠═f61a5f1d-2a08-4a63-a068-aba5c25725c2
 # ╠═98869068-79fb-42ee-9d21-d0c7f5a8ce1e

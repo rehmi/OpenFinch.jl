@@ -2,6 +2,7 @@ from enum import Enum
 import pigpio
 from dataclasses import dataclass
 from gpio.wavegen import WaveGen
+import logging
 
 class ScriptStatus(Enum):
     INITING = 0
@@ -27,10 +28,6 @@ class TriggerConfig:
     GRN_OUT: int = 23
     BLU_OUT: int = 27
     
-    RED_FACTOR: float = 1
-    GRN_FACTOR: float = 1
-    BLU_FACTOR: float = 1
-    
     TRIG_IN: int = BLU_IN
     BLU_START: int = 0
     GRN_START: int = 2742
@@ -46,8 +43,8 @@ class TriggerConfig:
     TRIG_TIME: int = 0
     TRIG_WIDTH: int = 8000
     LED_TIME: int = 400
-    LED_WIDTH: int = 4
-    WAVE_DURATION: int = 8300
+    LED_WIDTH: int = 5
+    WAVE_DURATION: int = 8000
 
 class PiGPIOScript:
     def __init__(self, pig, text=None, id=None):
@@ -92,16 +89,24 @@ class PiGPIOScript:
             self.id = -1
     
     def start(self, *args):
+        logging.debug(f"Entering PiGPIOScript.start({self.id}, args={args})")
         if self.id >= 0:
             self.pig.run_script(self.id, list(args))
     
     def run(self, *args):
+        logging.debug(f"Entering PiGPIOScript.run(id={self.id}, args={args})")
         if self.id >= 0:
             self.pig.run_script(self.id, list(args))
     
     def stop(self):
+        logging.debug(f"PiGPIOScript.stop(id={self.id})")
         if self.id >= 0:
             self.pig.stop_script(self.id)
+
+    def set_params(self, *args):
+        logging.debug(f"Entering PiGPIOScript.set_params(id={self.id}, args={args})")
+        if self.id >= 0:
+            self.pig.update_script(self.id, list(args))
 
     def status(self):
         e, _ = self.pig.script_status(self.id)
@@ -110,10 +115,6 @@ class PiGPIOScript:
     def params(self):
         _, p = self.pig.script_status(self.id)
         return p
-
-    def set_params(self, *args):
-        if self.id >= 0:
-            self.pig.update_script(self.id, list(args))
 
     def params_valid(self):
         params = self.params()
@@ -154,10 +155,11 @@ class PiGPIOWave:
         self.config = config
         # self.kwargs = config.__dict__
         self.wavegen = WaveGen()
+        self.trigger_camera = trigger_camera
         self.id = self.generate_wave(trigger_camera=trigger_camera)
 
     def __str__(self):
-        return f"PiGPIOWave{self.pig}, id={self.id}, id_trig={self.id_trig})"
+        return f"PiGPIOWave{self.pig}, id={self.id}, trigger_camera={self.trigger_camera}"
     
     def __repr__(self):
         return self.__str__()
@@ -166,6 +168,7 @@ class PiGPIOWave:
         self.delete()
 
     def delete(self):
+        logging.debug(f"Deleting wave {self}")
         if self.id >= 0:
             self.pig.wave_delete(self.id)
             self.id = -1
@@ -173,9 +176,9 @@ class PiGPIOWave:
     def generate_wave(self, trigger_camera=True):
         cf = self.config
         
-        RED_WIDTH = int(cf.RED_FACTOR * cf.LED_WIDTH)
-        GRN_WIDTH = int(cf.GRN_FACTOR * cf.LED_WIDTH)
-        BLU_WIDTH = int(cf.BLU_FACTOR * cf.LED_WIDTH)
+        RED_WIDTH = cf.LED_WIDTH
+        GRN_WIDTH = cf.LED_WIDTH
+        BLU_WIDTH = cf.LED_WIDTH
         
         RED_TIME = cf.LED_TIME + cf.RED_START
         GRN_TIME = cf.LED_TIME + cf.GRN_START
@@ -213,18 +216,19 @@ class PiGPIOWave:
             pigpio.pulse(set_mask, clr_mask, delay)
             for set_mask, clr_mask, delay in self.wavegen.wave_vector
         ]
-
+        self.pig.wave_add_new()
         self.pig.wave_add_generic(wave)
-        return self.pig.wave_create()
+        id = self.pig.wave_create()
+        logging.debug(f"PiGPIOWave.generate_wave() => id={id}")
+        return id
 
 class Sequencer:
     def __init__(self, pig, config):
         self.pig = pig
         self.config = config
-        self.wave_RGB = PiGPIOWave(self.pig, self.config, trigger_camera=False)
-        self.wave_RGB_trig = PiGPIOWave(self.pig, self.config, trigger_camera=True)
-        self.initialize_gpio();
-        self.initialize_trigger();
+        self.initialize_gpio()
+        self.initialize_trigger()
+        self.setup_waves()
 
     def initialize_gpio(self):
         cf = self.config
@@ -235,23 +239,30 @@ class Sequencer:
         for pin in [cf.TRIG_IN, cf.RED_IN, cf.GRN_IN, cf.BLU_IN, cf.STROBE_IN]:
             self.pig.set_mode(pin, pigpio.INPUT)
 
+    def setup_waves(self):
+        self.wave_RGB = PiGPIOWave(self.pig, self.config, trigger_camera=False)
+        self.wave_RGB_trig = PiGPIOWave(self.pig, self.config, trigger_camera=True)
+
     def initialize_trigger(self):
         self.script = self.trigger_wave_script(self.pig, self.config)
-        self.wave = PiGPIOWave(self.pig, self.config)
+        # self.wave = PiGPIOWave(self.pig, self.config)
+        self.setup_waves()
 
         # Wait for the script to finish initializing before starting it
         while self.script.initing():
             pass
-        self.script.start(self.wave.id)
+        self.script.start(self.wave_RGB.id, self.wave_RGB_trig.id)
 
-    def stop_wave(self):
-        self.script.set_params(0xffffffff) # deactivate the current wave
-        self.wave.delete()
-
-    def set_delay(self, t_del):
-        self.config.LED_TIME = t_del
-        self.wave = PiGPIOWave(self.pig, self.config)
-        self.script.set_params(self.wave.id)
+    def update_wave(self):
+        ### XXX N.B. this implicitly depends on self.config
+        # self.stop_wave()
+        self.script.set_params(0xffffffff, 0xffffffff) # deactivate the current wave
+        self.wave_RGB.delete()
+        self.wave_RGB_trig.delete()
+        # self.set_delay(self.config.LED_TIME)
+        # self.config.LED_TIME = t_del
+        self.setup_waves()
+        self.script.set_params(self.wave_RGB.id, self.wave_RGB_trig.id)
         
     def trigger_wave_script(self, pig, config):
         script = f"""
@@ -259,52 +270,41 @@ class Sequencer:
 
         # we expect RGB wave id in p0, RGB+trig wave id in p1
         lda {config.TRIG_IN} sta p2
-
-        # ld p9 1				# status: starting
+        # lda 3 sta p3        # set p3 (wave repeat counter)
+        lda 0 sta v3
 
     tag 100
         lda p0         		# load the current value of p0
-        or 0 jp 120    		# if p0 is valid (>=0), proceed
-        # ld p9 0				# status: sequencing paused
-        # changing the delay to <= 100 µs will increase pigpiod CPU use to > 100%
+        or 0 jp 115    		# if p0 is valid (>=0), proceed
         mics 101      		# otherwise delay for a bit
         jmp 100       		# and try again
         
-    # 	ld p9 2 			# status: waiting for p2 low
-    # tag 110
-    # 	r p2 jnz 110		# wait if p2 is high
-    # 	ld p9 3				# status: waiting for p2 high
-    # tag 111
-    # 	r p2 jz 111			# wait for rising edge of p2
-
-        # ld p9 4				# status: sequencing started
-        # br1 sta v4			# capture starting GPIO in p4
-        # tick sta v5			# capture the start time in p5
+    tag 115
+        lda v3 or 0 jz 116  # if the wave repeat counter is 0, jmp to 116
+        ld v0 p0            # load the RGB wave id into v0
+        dcr v3              # decrement the wave repeat counter
+        jmp 120
+        
+    tag 116                 # wave repeat counter is zero
+        ld v0 p1            # load the RGB+trig wave id into v0
+        lda 3 sta v3        # load the RGB wave repeat counter into v3
+        jmp 120
 
     tag 120
         r p2 jnz 121        # read the GPIO and jump out of loop if it's high
         mics 101           	# otherwise delay for a bit
         jmp 120            	# and continue polling
     tag 121
-        # tick sta v6			# capture trigger high time in p6
 
-        # ld p9 5
     tag 130
         r p2 jnz 130		# wait for falling edge on p2
 
-        wvtx p0				# trigger the wave
-        # br1 sta v7			# capture GPIO at trigger low in p7
-        # tick sta v8			# capture trigger low time in p8
-        # ld p9 6				# status: wave tx started
+        wvtx v0				# trigger the wave
 
     tag 140
         mics 101			# delay for a bit
         wvbsy
         jnz 140 			# wait for wave to finish
-        # tick sta v9			# capture wave finish time in p9
-        # ld p9 7				# status: wave tx complete
-        # ld p4 v4 ld p5 v5 ld p6 v6 ld p7 v7 ld p8 v8 ld p9 v9
-        # ld p9 8				# status: return params updated 
 
         jmp 100				# do it again
         ret
