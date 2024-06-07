@@ -89,22 +89,22 @@ class PiGPIOScript:
             self.id = -1
     
     def start(self, *args):
-        logging.debug(f"Entering PiGPIOScript.start({self.id}, args={args})")
+        # logging.debug(f"Entering PiGPIOScript.start({self.id}, args={args})")
         if self.id >= 0:
             self.pig.run_script(self.id, list(args))
     
     def run(self, *args):
-        logging.debug(f"Entering PiGPIOScript.run(id={self.id}, args={args})")
+        # logging.debug(f"Entering PiGPIOScript.run(id={self.id}, args={args})")
         if self.id >= 0:
             self.pig.run_script(self.id, list(args))
     
     def stop(self):
-        logging.debug(f"PiGPIOScript.stop(id={self.id})")
+        # logging.debug(f"PiGPIOScript.stop(id={self.id})")
         if self.id >= 0:
             self.pig.stop_script(self.id)
 
     def set_params(self, *args):
-        logging.debug(f"Entering PiGPIOScript.set_params(id={self.id}, args={args})")
+        # logging.debug(f"Entering PiGPIOScript.set_params(id={self.id}, args={args})")
         if self.id >= 0:
             self.pig.update_script(self.id, list(args))
 
@@ -168,7 +168,7 @@ class PiGPIOWave:
         self.delete()
 
     def delete(self):
-        logging.debug(f"Deleting wave {self}")
+        # logging.debug(f"Deleting wave {self}")
         if self.id >= 0:
             self.pig.wave_delete(self.id)
             self.id = -1
@@ -219,7 +219,7 @@ class PiGPIOWave:
         self.pig.wave_add_new()
         self.pig.wave_add_generic(wave)
         id = self.pig.wave_create()
-        logging.debug(f"PiGPIOWave.generate_wave() => id={id}")
+        # logging.debug(f"PiGPIOWave.generate_wave() => id={id}")
         return id
 
 class Sequencer:
@@ -255,14 +255,12 @@ class Sequencer:
 
     def update_wave(self):
         ### XXX N.B. this implicitly depends on self.config
-        # self.stop_wave()
-        self.script.set_params(0xffffffff, 0xffffffff) # deactivate the current wave
-        self.wave_RGB.delete()
-        self.wave_RGB_trig.delete()
-        # self.set_delay(self.config.LED_TIME)
-        # self.config.LED_TIME = t_del
+        old_RGB = self.wave_RGB
+        old_RGB_trig = self.wave_RGB_trig
         self.setup_waves()
         self.script.set_params(self.wave_RGB.id, self.wave_RGB_trig.id)
+        # old_RGB.delete()
+        # old_RGB_trig.delete()
         
     def trigger_wave_script(self, pig, config):
         script = f"""

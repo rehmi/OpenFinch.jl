@@ -257,9 +257,9 @@ md"""
 | red gain | $(@bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)) |
 | blue gain | $(@bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)) |
 | analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
-| LED width | $(@bind LED_WIDTH Slider(0:1:2700, default=200, show_value=true)) |
-| LED time | $(@bind LED_TIME Slider(0:1:8333, default=50, show_value=true)) |
-| Focal length | $(@bind f Slider(0:10:2000, default=400, show_value=true)) |
+| LED width | $(@bind LED_WIDTH Slider(0:1:2560, default=1280, show_value=true)) |
+| LED time | $(@bind LED_TIME Slider(0:1:8333, default=0, show_value=true)) |
+| Focal length | $(@bind f Slider(0:10:2000, default=650, show_value=true)) |
 | Fine focus | $(@bind df Slider(-5:0.1:5, default=0, show_value=true)) |
 | X offset | $(@bind xoff Slider(-50:1:50, default=0, show_value=true)) |
 | Y offset | $(@bind yoff Slider(-50:1:50, default=16, show_value=true)) |
