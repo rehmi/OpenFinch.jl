@@ -43,8 +43,11 @@ class TriggerConfig:
     TRIG_TIME: int = 0
     TRIG_WIDTH: int = 8000
     LED_TIME: int = 400
-    LED_WIDTH: int = 5
+    LED_WIDTH: int = 10
     WAVE_DURATION: int = 8000
+  
+    # Control which LED(s) to use for illumination
+    ILLUMINATION_MODE: str = '421'  # Default to '421' for backwards compatibility
 
 class PiGPIOScript:
     def __init__(self, pig, text=None, id=None):
@@ -184,6 +187,13 @@ class PiGPIOWave:
         GRN_TIME = cf.LED_TIME + cf.GRN_START
         BLU_TIME = cf.LED_TIME + cf.BLU_START
 
+        # Parse the ILLUMINATION_MODE string
+        try:
+            illumination_mask = int(cf.ILLUMINATION_MODE, 8)
+        except ValueError:
+            logging.warning(f"Invalid ILLUMINATION_MODE '{cf.ILLUMINATION_MODE}'. Using default '421'.")
+            illumination_mask = 0o421 
+
         # Define the initial state of the pins
         # self.wavegen.change_bit(cf.TRIG_OUT, 0, 0)
         # self.wavegen.change_bit(cf.RED_OUT, 0, 0)
@@ -196,17 +206,23 @@ class PiGPIOWave:
             self.wavegen.change_bit(cf.TRIG_OUT, 0, cf.TRIG_TIME)
             self.wavegen.change_bit(cf.TRIG_OUT, 1, cf.TRIG_TIME + cf.TRIG_WIDTH)
 
-        # RED LED pulse
-        self.wavegen.change_bit(cf.RED_OUT, 1, RED_TIME)
-        self.wavegen.change_bit(cf.RED_OUT, 0, RED_TIME + RED_WIDTH)
+        def add_pulse(output, time, width):
+            # logging.debug(f"add_pulse({output}, {time}, {width})")
+            self.wavegen.change_bit(output, 1, time)
+            self.wavegen.change_bit(output, 0, time + width)
 
-        # GRN LED pulse
-        self.wavegen.change_bit(cf.GRN_OUT, 1, GRN_TIME)
-        self.wavegen.change_bit(cf.GRN_OUT, 0, GRN_TIME + GRN_WIDTH)
+        def add_RGB_pulses(mask, time, width):
+            # logging.debug(f"add_RGB_pulses({mask:#o}, {time}, {width})")
+            if mask & 4:
+                add_pulse(cf.RED_OUT, time, width)
+            if mask & 2:
+                add_pulse(cf.GRN_OUT, time, width)
+            if mask & 1:
+                add_pulse(cf.BLU_OUT, time, width)
 
-        # BLU LED pulse
-        self.wavegen.change_bit(cf.BLU_OUT, 1, BLU_TIME)
-        self.wavegen.change_bit(cf.BLU_OUT, 0, BLU_TIME + BLU_WIDTH)
+        add_RGB_pulses((illumination_mask >> 6)&7, RED_TIME, RED_WIDTH)
+        add_RGB_pulses((illumination_mask >> 3)&7, GRN_TIME, GRN_WIDTH)
+        add_RGB_pulses((illumination_mask     )&7, BLU_TIME, BLU_WIDTH)
 
         # Add a final event to pad to desired duration
         self.wavegen.change_bit(cf.STROBE_IN, 1, cf.WAVE_DURATION)

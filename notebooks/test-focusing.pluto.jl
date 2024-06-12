@@ -14,6 +14,9 @@ macro bind(def, element)
     end
 end
 
+# ╔═╡ 3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
+using ImageFiltering
+
 # ╔═╡ afca5dbf-c726-4a59-9ebd-325ee0312901
 using Metal
 
@@ -239,32 +242,79 @@ begin
 	URI = "ws://$host:$port/ws"
 end
 
-# ╔═╡ f61a5f1d-2a08-4a63-a068-aba5c25725c2
-round(Int, 8333*3.5)
+# ╔═╡ b1dc96c5-67dd-4ab1-a036-fb17c7570b56
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
+  ╠═╡ =#
+
+# ╔═╡ fad65ad9-0edd-4619-a1fa-e26c77242216
+# ╠═╡ disabled = true
+#=╠═╡
+for i in 1:16
+	send_image(openfinch, slm_img)
+	send_image(openfinch, rot180(slm_img))
+end
+  ╠═╡ =#
+
+# ╔═╡ d1fa707e-3ab8-4aed-bca6-7f75c95145ad
+begin
+	W_λR   = @bind λR Slider(600:1:700, default=650, show_value=true);
+	W_λG   = @bind λG Slider(500:1:600, default=532, show_value=true);
+	W_λB   = @bind λB Slider(400:1:500, default=450, show_value=true);
+
+	W_rg   = @bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)
+	W_bg   = @bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)
+	W_ag   = @bind analog_gain Slider(1.0:0.1:100.0, default=2, show_value=true)
+
+	W_LW   = @bind LED_WIDTH Slider(0:1:2560, default=1280, show_value=true)
+	W_LT   = @bind LED_TIME Slider(0:1:8333, default=0, show_value=true)
+	
+	W_brt  = @bind brightness Slider(-1:0.1:1, default=0, show_value=true)
+	W_con  = @bind contrast Slider(0:0.1:32, default=1, show_value=true)
+	W_sat  = @bind saturation Slider(0:0.1:32, default=1, show_value=true)
+	W_nrm  = @bind nrmode Slider(0:1:4, default=0, show_value=true)
+	W_shp  = @bind sharpness Slider(0:0.1:16, default=1, show_value=true)
+end;
+
+# ╔═╡ 1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
+begin
+	W_f    = @bind f Slider(0:10:2500, default=650, show_value=true)
+	W_df   = @bind df Slider(-5:0.1:5, default=0, show_value=true)
+	W_xoff = @bind xoff Slider(-100:1:100, default=0, show_value=true)
+	W_yoff = @bind yoff Slider(-100:1:100, default=0, show_value=true)
+	W_ls   = @bind lens_scale Slider(1024:1024:16384, default=1024, show_value=true)
+
+	W_is   = @bind image_scale Slider(0.1:0.1:16, default=2, show_value=true)
+	W_ui   = @bind use_image CheckBox(true)
+	W_uc   = @bind use_chart CheckBox(true)
+end;
+
+# ╔═╡ c0df3c6c-433a-40d5-8af9-27a645a2adb8
+1/(1/(750) + 1/(5*8))
 
 # ╔═╡ b183ede1-7d1a-41d8-866e-ca1c826aca08
 lens_scales = [ 256, 384, 512, 768, 1024, 1536, 2048,
 				3072, 4096, 6144, 8192, 12288, 16384
 ]
 
+# ╔═╡ 266fc634-1a9d-45f8-9f20-2d79e477f0fa
+W_Go = @bind G_only CheckBox(true);
+
 # ╔═╡ 9e0052e2-c13c-42a3-971c-d7482044c25f
 md"""
-| control | value |
-| --: | :-- |
-| $\lambda_R$ | $(@bind λR Slider(400:1:700, default=650, show_value=true)) |
-| $\lambda_G$ | $(@bind λG Slider(400:1:700, default=532, show_value=true)) |
-| $\lambda_B$ | $(@bind λB Slider(400:1:700, default=460, show_value=true)) |
-| red gain | $(@bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)) |
-| blue gain | $(@bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)) |
-| analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
-| LED width | $(@bind LED_WIDTH Slider(0:1:2560, default=1280, show_value=true)) |
-| LED time | $(@bind LED_TIME Slider(0:1:8333, default=0, show_value=true)) |
-| Focal length | $(@bind f Slider(0:10:2000, default=650, show_value=true)) |
-| Fine focus | $(@bind df Slider(-5:0.1:5, default=0, show_value=true)) |
-| X offset | $(@bind xoff Slider(-50:1:50, default=0, show_value=true)) |
-| Y offset | $(@bind yoff Slider(-50:1:50, default=16, show_value=true)) |
-| Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
-| Lens scale | $(@bind lens_scale Select(lens_scales, default=1024)) |
+| control | value | control | value | control | value |
+| --: | :-- | --: | :-- | --: | :-- |
+| $\lambda_R$ | $W_λR | $\lambda_G$ | $W_λG | $\lambda_B$ | $W_λB |
+| red gain | $W_rg | blue gain | $W_bg | analog gain | $W_ag |
+| Noise reduction mode | $W_nrm | Sharpness | $W_shp | |
+| Brightness | $W_brt | Contrast | $W_con | Saturation | $W_sat |
+| LED width | $W_LW | LED time | $W_LT |
+| Focal length | $W_f | Fine focus | $W_df |
+| Lens scale | $W_ls | X offset | $W_xoff | Y offset | $W_yoff |
+| Use image  | $W_ui  | Image scaling factor | $W_is | Use chart | $W_uc |
+| Use G only | $W_Go |
 """
 
 # ╔═╡ b3441c7d-a097-435d-b1da-46869b9d2193
@@ -281,6 +331,21 @@ begin
 	mandrill = testimage("mandrill");
 	nothing
 end
+
+# ╔═╡ a7226d4a-0de6-4683-ac66-a679e5e4b83a
+W_sf = @bind sharpening_factor Slider(0:0.1:20, default=0, show_value=true)
+
+# ╔═╡ d7b8aa39-8965-48c0-a095-74fa2ff5257c
+begin
+	laplacian_kernel =
+		[ 0  1  0;
+		 1 -4  1;
+		 0  1  0];
+	sobol_kernel = 
+		[ -1 -1 -1;
+		  -1  9 -1;
+		  -1 -1 -1];
+end;
 
 # ╔═╡ 46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 begin
@@ -309,14 +374,24 @@ fy2 = Float32.((Y.-(yoff*1e-3)).^2);
 # ╔═╡ 67634cc3-8c6a-415f-998c-bf597e5f9d83
 R = sqrt.(fx2 .+ fy2 .+ Z^2);
 
-# ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
-ϕlensR = exp.(2f0π * 1im * R / Float32(ustrip(λR*u"nm")));
-
 # ╔═╡ 2177271e-fa25-48c1-9c11-67117ae3fde2
 ϕlensG = exp.(2f0π * 1im * R / Float32(ustrip(λG*u"nm")));
 
+# ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
+ϕlensR = G_only ? ϕlensG : exp.(2f0π * 1im * R / Float32(ustrip(λR*u"nm")));
+
 # ╔═╡ 6c212ba1-c558-47ad-a621-7c4e653bab86
-ϕlensB = exp.(2f0π * 1im * R / Float32(ustrip(λB*u"nm")));
+ϕlensB = G_only ? ϕlensG : exp.(2f0π * 1im * R / Float32(ustrip(λB*u"nm")));
+
+# ╔═╡ ddb31ca4-cae8-4ba1-acf3-543f54783b6b
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+alensG = AFArray(ϕlensG)
+  ╠═╡ =#
+
+# ╔═╡ 4f5f2c11-144f-49a7-87d1-1e426f90593f
+af_conv(a::Array, b::Array) = Array(ArrayFire.sync(af_conv(AFArray(a), AFArray(b))))
 
 # ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
 # ╠═╡ disabled = true
@@ -365,6 +440,9 @@ md"""
 # Definitions
 """
 
+# ╔═╡ b4fc462c-a529-4970-a0c0-c4b39cb8a51d
+@benchmark ArrayFire.sync(af_conv(a, b)) setup=(a=rand(AFArray{ComplexF32}, 8192, 8192); b=rand(AFArray{ComplexF32}, 8192, 8192))
+
 # ╔═╡ 8d230e31-8b13-4c59-ac4d-1efc102a5623
 # ╠═╡ show_logs = false
 BA = load("../data/Touhou - Bad Apple.mp4");
@@ -374,9 +452,10 @@ BA = load("../data/Touhou - Bad Apple.mp4");
 
 # ╔═╡ 2b2dd536-a71a-4364-910c-9106628a094b
 begin
-	chart = reverse(imresize(usaf_chart, ratio=image_scale), dims=1);
-	ba = reverse(imresize(BA[frame], ratio=image_scale), dims=1);
-	img = chart
+	chart = usaf_chart
+	# ba = BA[frame]
+	ba = BA[frame] + imfilter(BA[frame], sharpening_factor*laplacian_kernel)
+	img = reverse(imresize(use_chart ? chart : ba, ratio=image_scale), dims=1);
 end
 
 # ╔═╡ b06f5e8e-a880-46e8-b656-d99247ec4fc5
@@ -388,6 +467,9 @@ size(img).*dx./u"cm"
 # ╔═╡ 74af8bce-af71-4e54-8627-926fbd33c7cc
 BA[frame]
 
+# ╔═╡ 1b822a03-9d13-4413-a2bc-a0acda657808
+fBA = [ fft(ComplexF64.(Float64.(Gray.(b)))) for b in BA ]
+
 # ╔═╡ 5236f897-79ed-46f2-8b51-4aa5a0d78dec
 begin
 	ColorTypes.red(x::Gray) = x
@@ -398,36 +480,71 @@ end
 # ╔═╡ 693a5636-387b-42bf-a130-3111825e11e4
 iR = (red.(img)) .* ϕ_rand[1];
 
-# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
-ϕR = conv(iR, ϕlensR);
-
 # ╔═╡ 2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
 iG = (green.(img)) .* ϕ_rand[2];
 
 # ╔═╡ ceb402ae-ab6b-400e-a481-9bd86a22bc1a
-ϕG = conv(iG, ϕlensG);
+ϕG = use_image ? conv(iG, ϕlensG) : ϕlensG;
+
+# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
+ϕR = G_only ? ϕG : use_image ? conv(iR, ϕlensR) : ϕlensR;
+
+# ╔═╡ 59df8948-694a-4c57-a3bc-3d5af5719cfe
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+aiG = AFArray(iG)
+  ╠═╡ =#
+
+# ╔═╡ 5d598fe0-9bbf-46be-8088-c0113842d99e
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+(Array(ArrayFire.sync(aiG)))
+  ╠═╡ =#
+
+# ╔═╡ 05db845c-6dba-4583-8c62-871f63126fad
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+aG = af_conv(iG, ϕlensG)
+  ╠═╡ =#
 
 # ╔═╡ 058d33db-7b24-42a3-930f-f3ee24b6b113
 iB = (blue.(img)) .* ϕ_rand[3];
 
 # ╔═╡ dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
-ϕB = conv(iB, ϕlensB);
-
-# ╔═╡ e23a55a1-13d8-446a-a66c-00b7af640d71
-
+ϕB = G_only ? ϕG : use_image ? conv(iB, ϕlensB) : ϕlensB;
 
 # ╔═╡ 7d12e54d-5cad-4259-a742-c7b8448b4470
-function extract_central(matrix::Matrix, dims::Tuple{Int, Int})
-    rows, cols = size(matrix)
-    target_rows, target_cols = dims
+function extract_central(matrix::Matrix, dims::Tuple{Int, Int}, offset::Tuple{Int, Int}=(0, 0))
+  rows, cols = size(matrix)
+  target_rows, target_cols = dims
+  row_offset, col_offset = offset
 
-    start_row = (rows - target_rows + 1) ÷ 2 + 1
-    end_row = start_row + target_rows - 1
+  # Handle cases where dimensions are too large, considering the offset
+  target_rows = min(target_rows, rows - abs(row_offset))
+  target_cols = min(target_cols, cols - abs(col_offset))
 
-    start_col = (cols - target_cols + 1) ÷ 2 + 1
-    end_col = start_col + target_cols - 1
+  # Calculate the central starting position
+  start_row = (rows - target_rows) ÷ 2 + 1 
+  start_col = (cols - target_cols) ÷ 2 + 1
 
-    return matrix[start_row:end_row, start_col:end_col]
+  # Apply the offset
+  start_row += row_offset 
+  start_col += col_offset
+
+  # Calculate the ending positions
+  end_row = start_row + target_rows - 1
+  end_col = start_col + target_cols - 1
+
+  # Ensure the extracted region stays within the matrix bounds
+  start_row = max(start_row, 1)
+  end_row = min(end_row, rows)
+  start_col = max(start_col, 1)
+  end_col = min(end_col, cols)
+
+  return matrix[start_row:end_row, start_col:end_col]
 end
 
 # ╔═╡ 7f1b4f21-d822-4860-94f4-4cb610a34e39
@@ -542,9 +659,10 @@ begin
 	    end
 	end
 
-	function image_to_base64(image::Array{<:Colorant})
+	function image_to_base64(image::Array{<:Colorant}; lossless=false)
 		io = IOBuffer()
-		save(Stream{format"PNG"}(io), image)  # Save the image as PNG to the IOBuffer
+		fmt = lossless ? format"PNG" : format"JPEG"
+		save(Stream{fmt}(io), image)  # Save the image as PNG to the IOBuffer
 		seekstart(io)  # Reset the buffer's position to the beginning
 		return base64encode(io)  # Encode the buffer's content to base64
 	end
@@ -554,8 +672,8 @@ begin
 		return load(IOBuffer(imbuf))
 	end
 
-	function send_image(channel, image::Array{<:Colorant})
-		encoded_image = image_to_base64(image)
+	function send_image(channel, image::Array{<:Colorant}; lossless=false)
+		encoded_image = image_to_base64(image, lossless=lossless)
 		put!(channel, Dict("slm_image" => encoded_image))
 	end
 
@@ -564,8 +682,10 @@ begin
 	"""
 end
 
-# ╔═╡ b1dc96c5-67dd-4ab1-a036-fb17c7570b56
-send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
+# ╔═╡ 8a02142d-dd14-4ba8-9ad8-0bede5e16a5b
+send_controls(openfinch, Dict(
+	"ILLUMINATION_MODE" => G_only ? "222" : "421"
+))
 
 # ╔═╡ 697746d9-8baf-45a2-9eef-8c63857984b1
 send_controls(openfinch, Dict(
@@ -574,8 +694,13 @@ send_controls(openfinch, Dict(
 	"ColourGains" => [red_gain, blue_gain],
 	"AnalogueGain" => analog_gain,
 	# "WAVE_DURATION" => round(Int, 8333*3.5),
-	"ScalerCrop" => [3, 0, 1456, 1088]
+	# "ScalerCrop" => [3, 0, 1456, 1088]
 	# "ScalerCrop" => [0, 0, 64, 16]
+	"NoiseReductionMode" => nrmode,
+	"Brightness" => brightness,
+	"Saturation" => saturation,
+	"Contrast" => contrast,
+	"Sharpness" => sharpness
 ));
 
 # ╔═╡ cc316130-cf9e-4dd6-97ef-a114831644ad
@@ -615,13 +740,26 @@ cgh = (RGB.(
 	(real.(ϕR).>0),
 	(real.(ϕG).>0),
 	(real.(ϕB).>0)
-))
+));
 
 # ╔═╡ 79667c43-705a-4c34-b073-f91eac682674
-slm_img = extract_central(cgh, (1280, 1280))
+slm_img = extract_central(cgh, (1280, 1280), (0, 0))
 
 # ╔═╡ 95b60065-9494-40a4-bdbb-41139ae8d86a
 send_image(openfinch, slm_img)
+
+# ╔═╡ 7c39308c-f5d6-4270-8540-24e1979e2be2
+RGB.(fBA[frame])
+
+# ╔═╡ f63d5845-3b23-43e5-8d23-5e44874e5ca5
+RGB.(ifft(fft(Float32.(Gray.(BA[frame])))))
+
+# ╔═╡ 0d99ff55-5f08-4079-aeb7-4feab7ce389f
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+RGB.(Array(AFArray(iG))), RGB.(iG)
+  ╠═╡ =#
 
 # ╔═╡ bed6430e-89a7-4e0f-9804-827ff23f26d7
 function decode_image(msg)
@@ -864,6 +1002,7 @@ FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 FourierTools = "b18b359b-aebc-45ac-a139-9c0ccbb2871e"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+ImageFiltering = "6a3955dd-da59-5b1f-98d4-e7296123deb5"
 ImageIO = "82e4d734-157c-48bb-816b-45c225c6df19"
 ImageShow = "4e3cecfd-b093-5904-9786-8bbb286a6a31"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
@@ -899,6 +1038,7 @@ FileIO = "~1.16.3"
 FourierTools = "~0.4.3"
 HTTP = "~1.10.8"
 HypertextLiteral = "~0.9.5"
+ImageFiltering = "~0.7.8"
 ImageIO = "~0.6.8"
 ImageShow = "~0.3.8"
 Images = "~0.26.1"
@@ -926,7 +1066,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "6b9af5a1aefb11807134a26209b03b90311bdd07"
+project_hash = "85b32d11fdcfd770af29e291330496866767f218"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -3307,22 +3447,33 @@ version = "1.4.1+1"
 # ╟─5c459507-67eb-41fd-9ce6-3cd489601064
 # ╠═2537ce03-ddb0-4aab-a441-1531a5e6996d
 # ╠═b1dc96c5-67dd-4ab1-a036-fb17c7570b56
-# ╠═f61a5f1d-2a08-4a63-a068-aba5c25725c2
 # ╠═98869068-79fb-42ee-9d21-d0c7f5a8ce1e
-# ╠═a6003b6c-beea-49ca-bbd3-fcdb62562b2b
-# ╠═697746d9-8baf-45a2-9eef-8c63857984b1
+# ╟─a6003b6c-beea-49ca-bbd3-fcdb62562b2b
 # ╟─9e0052e2-c13c-42a3-971c-d7482044c25f
+# ╠═fad65ad9-0edd-4619-a1fa-e26c77242216
+# ╠═79667c43-705a-4c34-b073-f91eac682674
+# ╠═95b60065-9494-40a4-bdbb-41139ae8d86a
+# ╟─d1fa707e-3ab8-4aed-bca6-7f75c95145ad
+# ╟─1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
+# ╠═8a02142d-dd14-4ba8-9ad8-0bede5e16a5b
+# ╠═697746d9-8baf-45a2-9eef-8c63857984b1
+# ╠═c0df3c6c-433a-40d5-8af9-27a645a2adb8
 # ╠═ec89a498-e270-458c-a073-c3c26874f2ed
 # ╠═b06f5e8e-a880-46e8-b656-d99247ec4fc5
 # ╟─b183ede1-7d1a-41d8-866e-ca1c826aca08
-# ╠═79667c43-705a-4c34-b073-f91eac682674
 # ╠═39570ba6-7602-4dd6-8827-b709b4a66628
+# ╠═266fc634-1a9d-45f8-9f20-2d79e477f0fa
 # ╟─b3441c7d-a097-435d-b1da-46869b9d2193
 # ╠═a58c5e86-b282-43a7-b74a-7dc8f1e49976
 # ╠═2b2dd536-a71a-4364-910c-9106628a094b
+# ╠═a7226d4a-0de6-4683-ac66-a679e5e4b83a
 # ╠═d57b63e3-6cc9-4f40-bb27-107b68efc909
 # ╠═74af8bce-af71-4e54-8627-926fbd33c7cc
-# ╠═95b60065-9494-40a4-bdbb-41139ae8d86a
+# ╠═1b822a03-9d13-4413-a2bc-a0acda657808
+# ╠═7c39308c-f5d6-4270-8540-24e1979e2be2
+# ╠═f63d5845-3b23-43e5-8d23-5e44874e5ca5
+# ╠═3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
+# ╠═d7b8aa39-8965-48c0-a095-74fa2ff5257c
 # ╠═46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 # ╠═ff2a1617-75ac-46b5-89eb-655dec0ebd79
 # ╠═eb88fa82-9ff4-4ece-a227-7540088071de
@@ -3338,6 +3489,12 @@ version = "1.4.1+1"
 # ╠═3162b0ae-627b-4511-b453-bb929e80203a
 # ╠═ceb402ae-ab6b-400e-a481-9bd86a22bc1a
 # ╠═dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
+# ╠═59df8948-694a-4c57-a3bc-3d5af5719cfe
+# ╠═0d99ff55-5f08-4079-aeb7-4feab7ce389f
+# ╠═ddb31ca4-cae8-4ba1-acf3-543f54783b6b
+# ╠═05db845c-6dba-4583-8c62-871f63126fad
+# ╠═5d598fe0-9bbf-46be-8088-c0113842d99e
+# ╠═4f5f2c11-144f-49a7-87d1-1e426f90593f
 # ╠═1e87f77c-e04e-40c0-a20c-e074a99682aa
 # ╟─b71d68e6-0b7c-4a1e-9ca9-5cd183b83f0e
 # ╠═afca5dbf-c726-4a59-9ebd-325ee0312901
@@ -3345,11 +3502,11 @@ version = "1.4.1+1"
 # ╟─d4953849-16cb-4f3f-befe-57f1fc327735
 # ╠═c10f6c81-bda1-443a-942c-6c0bcdab3c80
 # ╠═afef2dbb-c08c-4cc2-85ab-a28db96d6a0e
+# ╠═b4fc462c-a529-4970-a0c0-c4b39cb8a51d
 # ╠═8d230e31-8b13-4c59-ac4d-1efc102a5623
 # ╠═5236f897-79ed-46f2-8b51-4aa5a0d78dec
-# ╠═e23a55a1-13d8-446a-a66c-00b7af640d71
 # ╠═7d12e54d-5cad-4259-a742-c7b8448b4470
-# ╟─5084973f-e4e4-4d43-a155-d848efce3f01
+# ╠═5084973f-e4e4-4d43-a155-d848efce3f01
 # ╟─7f1b4f21-d822-4860-94f4-4cb610a34e39
 # ╟─cc316130-cf9e-4dd6-97ef-a114831644ad
 # ╟─bed6430e-89a7-4e0f-9804-827ff23f26d7

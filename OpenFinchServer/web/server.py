@@ -30,6 +30,7 @@ class MessageHandler:
             'LED_TIME': lambda data, ws: self.handle_config_control('LED_TIME', data, ws),
             'LED_WIDTH': lambda data, ws: self.handle_config_control('LED_WIDTH', data, ws),
             'WAVE_DURATION': lambda data, ws: self.handle_config_control('WAVE_DURATION', data, ws),
+            'ILLUMINATION_MODE': lambda data, ws: self.handle_illumination_mode(data, ws),
             'exposure_absolute': self.handle_camera_control,
             'brightness': self.handle_camera_control,
             'contrast': self.handle_camera_control,
@@ -94,7 +95,7 @@ class MessageHandler:
         self.camera_server.jpeg_quality = int(data.get('value', 10))
 
     async def handle_config_control(self, control_name, data, ws):
-        logging.debug(f"handle_config_control called with data: {data}")
+        logging.debug(f"handle_config_control({control_name}, {data}")
         value = int(data.get('value', 0))
         if control_name in ['LED_TIME', 'LED_WIDTH', 'WAVE_DURATION']:
             setattr(self.camera_server.sysctrl.config, control_name, value)
@@ -143,6 +144,19 @@ class MessageHandler:
         
         logging.info(f"img has type {type(img)} and size {img.size}")
         self.camera_server.display.display_image(img)
+
+    async def handle_illumination_mode(self, data, ws):
+        mode = data.get('value', '777')  # Default to '777' (all LEDs on for all fields)
+        
+        # Validate the octal string (should be 3 digits, 0-7)
+        if len(mode) == 3 and all(c in '01234567' for c in mode): 
+            self.camera_server.sysctrl.config.ILLUMINATION_MODE = mode
+            self.camera_server.sysctrl.update_wave()
+            logging.info(f"Illumination mode set to {mode}")
+        else:
+            logging.warning(f"Invalid illumination mode requested: {mode}. Using default '421'.")
+            self.camera_server.sysctrl.config.ILLUMINATION_MODE = '421'
+            self.camera_server.sysctrl.update_wave()
 
 class CameraServer:
     def __init__(self):
