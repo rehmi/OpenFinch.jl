@@ -406,7 +406,7 @@ ColorTypes.blue(x::Gray) = x
 
 # @benchmark ArrayFire.sync(af_conv(a, b)) setup=(a=rand(AFArray{ComplexF32}, 8192, 8192); b=rand(AFArray{ComplexF32}, 8192, 8192))
 
-## ###################################################
+# ## ###################################################
 
 color_chart = load("data/color_reschart02.png");
 usaf_chart = load("data/USAF512.png")
@@ -416,7 +416,7 @@ mandrill = testimage("mandrill");
 
 BA = load("data/Touhou - Bad Apple.mp4")
 
-## ###################################################
+# ## ###################################################
 
 host = "winch.local"
 port = 8000
@@ -435,7 +435,7 @@ openfinch = OpenFinchConnection(URI)
 LED_WIDTH = 2560
 LED_TIME = 0
 
-f = 600 # 1200
+f = 1200
 df = 0
 xoff = 0
 yoff = -25
@@ -472,14 +472,14 @@ X,Y = ustrip.(QuantityArray.(collect.(grid), dx))
 # | Use G only | $W_Go |
 # """
 
-##
+# ##
 
 source_img = usaf_chart;
 # source_img = ba;
 
 img = reverse(imresize(source_img, ratio=image_scale), dims=1)
 
-##
+# ##
 
 ϕ_rand = [Array(exp.(2f0π * im * rand(AFArray{Float32}, size(img)...))) for i in 1:3];
 size(ϕ_rand[1])
@@ -498,7 +498,7 @@ aR = AFArray(R)
 ϕlensR = G_only ? ϕlensG : Array(exp.(2f0π * 1im * aR / Float32(ustrip(λR*u"nm"))))
 ϕlensB = G_only ? ϕlensG : Array(exp.(2f0π * 1im * aR / Float32(ustrip(λB*u"nm"))))
 
-##
+# ##
 
 iG = (green.(img)) .* ϕ_rand[2]
 iR = (red.(img)) .* ϕ_rand[1]
@@ -546,102 +546,69 @@ send_image(openfinch, slm_img)
 
 ##
 
-foo = fftshift(ifft(fft(AFArray(iG)) .* (fft(AFArray(ϕlensG)))))
-
 ##
 
+aflens = fft(AFArray(fftshift(ϕlensG)))
+
+# RGB.(Array(alens))
+
 # aϕG = Array(af_conv(AFArray(iG), AFArray(ϕlensG), expand=false))
-aϕG = Array(fftshift(ifft(fft(AFArray(iG)) .* (fft(AFArray(ϕlensG))))))
+# aϕG = Array(fftshift(ifft(fft(AFArray(iG)) .* (fft(AFArray(ϕlensG))))))
+aϕG = Array(ifft(fft(AFArray(iG)) .* aflens))
 acgh = Gray.(real.(aϕG).>0)
 aslm_img = extract_central(acgh, (1280, 1280), (0, 0))
 send_image(openfinch, aslm_img)
 
 ##
 
-# RGB.(Array(AFArray(iG)))
+# imresize(BA[600], ratio=16)
+# imresize(BA[600], (8192, 8192))
 
-# RGB.(iG)
+function make_cgh(frame, aflens)
+	gray_frame = Float32.(Gray.(frame))
+	phase = exp.(2f0π * im * rand(AFArray{Float32}, size(aflens)...))
+	scaled_gf = resample(gray_frame, size(aflens))
+	ac = ifft(fft(AFArray(scaled_gf) .* phase) .* aflens)
+	# return RGB.(Array(phase))
+	ar = real.(ac) .> 0
+	h = Gray.(Array(ar))
+	extract_central(h, (1280, 1280), (0, 0))
+end
 
-RGB.(aϕG)
+send_image(openfinch, make_cgh(BA[600], aflens))
+
+make_cgh(BA[1684], aflens)
+
+###
+
+Gray.(resample(Float32.(Gray.(BA[1684])), size(ϕlensG)))
+
+bacgh = [
+	make_cgh(reverse(frame, dims=1), aflens)
+	for frame in BA[600:4:700]
+]
+
+for c in bacgh
+	send_image(openfinch, c)
+end
 
 ##
 
-aϕlensG = AFArray(ϕlensG)
+using JLD2
+using ProgressMeter
+using Printf
 
-aiG = AFArray(iG)
+# jf = jldopen("BA1200G.jld2", "a+")
 
-@time aG = af_conv(aiG, aϕlensG, expand=false)
+# jf["cgh"] = Vector{Any}(undef, length(BA))
+# jcgh = jf["cgh"]
 
-# (Array(ArrayFire.sync(aiG)))
-
-frame = 1684
-
-# ba = BA[frame] + imfilter(BA[frame], sharpening_factor*laplacian_kernel)
-ba = BA[frame]
-
-imresize(ba, ratio=16)
-
-grab = (ComplexF32.(Float32.(Gray.(imresize(ba, ratio=16)))))
-
-agrab = AFArray(grab)
-
-grab = 
-
-out = conv(grab, ϕlensG)
-
-RGB.(out)
-
-aout = af_conv(agrab, aϕlensG, expand=true)
-
-RGB.(Array(aout))
-
-cgh = Gray.(real.(out).>0)
-
-slm_img = extract_central(cgh, (1280, 1280), (0, 0))
-
-send_image(openfinch, slm_img)
-
-
-# RGB.(Array(alens))
-
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
-  ╠═╡ =#
-
-# ╠═╡ disabled = true
-#=╠═╡
-for i in 1:16
-	send_image(openfinch, slm_img)
-	send_image(openfinch, rot180(slm_img))
+@showprogress for i in 1:length(BA)
+	name = @sprintf("%04d", i)
+	cgh = make_cgh(reverse(BA[i], dims=1), aflens)
+	jldopen("BACGH.jld2", "a+") do j
+		j["cgh/$name"] = Bool.(cgh)
+	end
 end
-  ╠═╡ =#
 
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-ws = rawws(URI);
-  ╠═╡ =#
-
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-WebSockets.send(ws, JSON.json(Dict(
-	"use_base64_encoding"=>Dict("value"=>false),
-	"send_fps_updates"=>Dict("value"=>false),
-	"stream_frames"=>Dict("value"=>false),
-)))
-  ╠═╡ =#
-
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-ws
-  ╠═╡ =#
-
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-send(ws, JSON.json(Dict("image_request"=>true)))
-  ╠═╡ =#
+##
