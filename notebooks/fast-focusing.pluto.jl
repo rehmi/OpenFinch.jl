@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.41
+# v0.19.42
 
 using Markdown
 using InteractiveUtils
@@ -13,16 +13,6 @@ macro bind(def, element)
         el
     end
 end
-
-# ╔═╡ 3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
-using ImageFiltering
-
-# ╔═╡ afca5dbf-c726-4a59-9ebd-325ee0312901
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-using Metal
-  ╠═╡ =#
 
 # ╔═╡ c10f6c81-bda1-443a-942c-6c0bcdab3c80
 begin
@@ -108,7 +98,7 @@ begin
 	ENV["AF_SYNCHRONOUS_CALLS"] = "0"
 
 	using Libdl
-	((x,y)->x∈y||push!(y,x))("/opt/arrayfire/lib", Libdl.DL_LOAD_PATH)
+	# ((x,y)->x∈y||push!(y,x))("/opt/arrayfire/lib", Libdl.DL_LOAD_PATH)
 	((x,y)->x∈y||push!(y,x))("/opt/homebrew/lib", Libdl.DL_LOAD_PATH)
 
 	# using WaveOptics
@@ -284,10 +274,10 @@ end;
 
 # ╔═╡ 1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
 begin
-	W_f    = @bind f Slider(0:10:2500, default=650, show_value=true)
+	W_f    = @bind f Slider(0:10:2500, default=1200, show_value=true)
 	W_df   = @bind df Slider(-5:0.1:5, default=0, show_value=true)
 	W_xoff = @bind xoff Slider(-100:1:100, default=0, show_value=true)
-	W_yoff = @bind yoff Slider(-100:1:100, default=0, show_value=true)
+	W_yoff = @bind yoff Slider(-100:1:100, default=-25, show_value=true)
 	W_ls   = @bind lens_scale Slider(1024:1024:16384, default=1024, show_value=true)
 
 	W_is   = @bind image_scale Slider(0.1:0.1:16, default=2, show_value=true)
@@ -336,10 +326,55 @@ begin
 	nothing
 end
 
+# ╔═╡ a4b4901b-6a6f-440d-867b-47e02796ebab
+source_img = usaf_chart;
+# source_img = ba;
+
+# ╔═╡ 2b2dd536-a71a-4364-910c-9106628a094b
+img = reverse(imresize(source_img, ratio=image_scale), dims=1);
+
 # ╔═╡ a7226d4a-0de6-4683-ac66-a679e5e4b83a
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 W_sf = @bind sharpening_factor Slider(0:0.1:20, default=0, show_value=true)
+  ╠═╡ =#
+
+# ╔═╡ 1ec2f842-9bba-4478-a159-35932d28e315
+chart = usaf_chart
+
+# ╔═╡ 19d29c59-9fef-4750-bebe-472e66ca5967
+8192/480
+
+# ╔═╡ 3f7bb0d9-77be-403d-93b2-e4cf44bcd838
+
+
+# ╔═╡ 6aa560ed-86b8-484d-851b-32b8b0d3ee2d
+ϕ_rand = [exp.(2f0π * im * rand(AFArray{Float32}, size(img)...)) for i in 1:3];
+
+# ╔═╡ 1b822a03-9d13-4413-a2bc-a0acda657808
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+fBA = [ fft(ComplexF64.(Float64.(Gray.(b)))) for b in BA ]
+  ╠═╡ =#
+
+# ╔═╡ 7c39308c-f5d6-4270-8540-24e1979e2be2
+#=╠═╡
+RGB.(fBA[frame])
+  ╠═╡ =#
+
+# ╔═╡ 3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+using ImageFiltering
+  ╠═╡ =#
 
 # ╔═╡ d7b8aa39-8965-48c0-a095-74fa2ff5257c
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 begin
 	laplacian_kernel =
 		[ 0  1  0;
@@ -350,6 +385,10 @@ begin
 		  -1  9 -1;
 		  -1 -1 -1];
 end;
+  ╠═╡ =#
+
+# ╔═╡ df06dff7-6bb2-4067-9efc-294189efce63
+size(ϕ_rand[1])
 
 # ╔═╡ 46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 begin
@@ -366,6 +405,9 @@ begin
 	nothing
 end
 
+# ╔═╡ b06f5e8e-a880-46e8-b656-d99247ec4fc5
+size(img).*dx./u"cm"
+
 # ╔═╡ ff2a1617-75ac-46b5-89eb-655dec0ebd79
 Z = Float32(ustrip((f + df)*u"mm"))
 
@@ -378,6 +420,12 @@ fy2 = Float32.((Y.-(yoff*1e-3)).^2);
 # ╔═╡ 67634cc3-8c6a-415f-998c-bf597e5f9d83
 R = sqrt.(fx2 .+ fy2 .+ Z^2);
 
+# ╔═╡ a7d722af-a962-40a2-ae89-e4e520b88fd2
+# ╠═╡ disabled = true
+#=╠═╡
+ϕ_rand = [exp.(2f0π * im * rand(Float32, size(img)...)) for i in 1:3];
+  ╠═╡ =#
+
 # ╔═╡ 2177271e-fa25-48c1-9c11-67117ae3fde2
 # ϕlensG = exp.(2f0π * 1im * R / Float32(ustrip(λG*u"nm")));
 
@@ -386,8 +434,20 @@ md"""
 ## Test ArrayFire performance
 """
 
+# ╔═╡ 8f85b529-f96c-4cb8-bb3e-3d5cc4dacfbc
+# ╠═╡ disabled = true
+#=╠═╡
+RGB.(iG), RGB.(Array(AFArray(iG)))
+  ╠═╡ =#
+
 # ╔═╡ 03e90cbb-9e34-431e-8d91-1d7ed77592da
-ϕlensG = Array(exp.(AFArray(2f0π * 1im * R / Float32(ustrip(λG*u"nm")))))
+ϕlensG = Array(exp.((2f0π * 1im * AFArray(R) / Float32(ustrip(λG*u"nm")))));
+
+# ╔═╡ b22d2572-d3a1-4288-9aee-301847ec78cd
+alens = AFArray(ϕlensG)
+
+# ╔═╡ 6b675f95-b0d1-4ac7-9e27-98baa8f4a45d
+extrema(abs.(ϕlensG))
 
 # ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
 ϕlensR = G_only ? ϕlensG : exp.(2f0π * 1im * R / Float32(ustrip(λR*u"nm")));
@@ -439,41 +499,6 @@ af_conv(a::Array, b::Array) = Array(ArrayFire.sync(af_conv(AFArray(a), AFArray(b
 ϕ = [ ϕR, ϕG, ϕB ];
   ╠═╡ =#
 
-# ╔═╡ b71d68e6-0b7c-4a1e-9ca9-5cd183b83f0e
-md"""
-## Test Metal performance
-"""
-
-# ╔═╡ 55a3db55-9d5f-42c4-8888-6c05d968e2c7
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-begin
-	mX = MtlArray(Float32.(X))
-	mY = MtlArray(Float32.(Y))
-	mZ = Float32(Z)
-	mfx2 = (mX.-(xoff*1f-3)).^2
-	mfy2 = (mY.-(yoff*1f-3)).^2
-	mR = sqrt.(mfx2 .+ mfy2 .+ mZ^2);
-	mϕ_rand = exp.(2f0π * im * Metal.rand(size(img)...));
-
-	# miR = (red.(img)) .* mϕ_rand;
-	# miG = (green.(img)) .* mϕ_rand;
-	# miB = (blue.(img)) .* mϕ_rand;
-
-	mϕlensR = exp.(2f0π * 1im * mR / Float32(ustrip(λR*1f0u"nm")));
-	mϕlensG = exp.(2f0π * 1im * mR / Float32(ustrip(λG*1f0u"nm")));
-	mϕlensB = exp.(2f0π * 1im * mR / Float32(ustrip(λB*1f0u"nm")));
-
-	# mϕR = conv(miR, mϕlensR);
-	# mϕG = conv(miG, mϕlensG);
-	# mϕB = conv(miB, mϕlensB);
-
-	# mϕ = [ mϕR, mϕG, mϕB ];
-	Metal.@sync nothing
-end
-  ╠═╡ =#
-
 # ╔═╡ d4953849-16cb-4f3f-befe-57f1fc327735
 md"""
 ---
@@ -490,32 +515,21 @@ BA = load("../data/Touhou - Bad Apple.mp4");
 # ╔═╡ d57b63e3-6cc9-4f40-bb27-107b68efc909
 @bind frame Slider(1:length(BA), default=1684, show_value=true)
 
-# ╔═╡ 2b2dd536-a71a-4364-910c-9106628a094b
-begin
-	chart = usaf_chart
-	ba = BA[frame]
-	# ba = BA[frame] + imfilter(BA[frame], sharpening_factor*laplacian_kernel)
-	img = reverse(imresize(use_chart ? chart : ba, ratio=image_scale), dims=1);
-end
+# ╔═╡ a21ae10f-c99b-49e9-b4dd-09d3932f289c
+# ba = BA[frame] + imfilter(BA[frame], sharpening_factor*laplacian_kernel)
+ba = BA[frame]
 
-# ╔═╡ b06f5e8e-a880-46e8-b656-d99247ec4fc5
-size(img).*dx./u"cm"
+# ╔═╡ 6910aaa7-21c6-4236-a8e1-eaa829198bc4
+grab = AFArray(ComplexF32.(Float32.(Gray.(imresize(ba, ratio=16)))))
 
-# ╔═╡ a7d722af-a962-40a2-ae89-e4e520b88fd2
-ϕ_rand = [exp.(2f0π * im * rand(Float32, size(img)...)) for i in 1:3];
+# ╔═╡ 1f15928f-c912-40cb-a2a1-4a03f8ed432c
+ArrayFire.sync(af_conv(grab, alens, expand=false))
 
 # ╔═╡ 74af8bce-af71-4e54-8627-926fbd33c7cc
 BA[frame]
 
 # ╔═╡ 2a363012-6dad-47ef-a8ce-e4746cb40459
 size(BA[1])
-
-# ╔═╡ 1b822a03-9d13-4413-a2bc-a0acda657808
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-fBA = [ fft(ComplexF64.(Float64.(Gray.(b)))) for b in BA ]
-  ╠═╡ =#
 
 # ╔═╡ 5236f897-79ed-46f2-8b51-4aa5a0d78dec
 begin
@@ -777,16 +791,8 @@ slm_img = extract_central(cgh, (1280, 1280), (0, 0))
 # ╔═╡ 95b60065-9494-40a4-bdbb-41139ae8d86a
 send_image(openfinch, slm_img)
 
-# ╔═╡ 7c39308c-f5d6-4270-8540-24e1979e2be2
-#=╠═╡
-RGB.(fBA[frame])
-  ╠═╡ =#
-
-# ╔═╡ f63d5845-3b23-43e5-8d23-5e44874e5ca5
-RGB.(ifft(fft(Float32.(Gray.(BA[frame])))))
-
-# ╔═╡ 8f85b529-f96c-4cb8-bb3e-3d5cc4dacfbc
-RGB.(iG), RGB.(Array(AFArray(iG)))
+# ╔═╡ d7343da1-1918-4c5c-a8e9-3224bd577c03
+RGB.(Array(alens))
 
 # ╔═╡ bed6430e-89a7-4e0f-9804-827ff23f26d7
 function decode_image(msg)
@@ -3346,7 +3352,7 @@ version = "1.4.1+1"
 # ╠═79667c43-705a-4c34-b073-f91eac682674
 # ╠═95b60065-9494-40a4-bdbb-41139ae8d86a
 # ╠═d1fa707e-3ab8-4aed-bca6-7f75c95145ad
-# ╟─1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
+# ╠═1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
 # ╠═8a02142d-dd14-4ba8-9ad8-0bede5e16a5b
 # ╠═697746d9-8baf-45a2-9eef-8c63857984b1
 # ╠═c0df3c6c-433a-40d5-8af9-27a645a2adb8
@@ -3357,16 +3363,27 @@ version = "1.4.1+1"
 # ╠═266fc634-1a9d-45f8-9f20-2d79e477f0fa
 # ╟─b3441c7d-a097-435d-b1da-46869b9d2193
 # ╠═a58c5e86-b282-43a7-b74a-7dc8f1e49976
+# ╠═a4b4901b-6a6f-440d-867b-47e02796ebab
 # ╠═2b2dd536-a71a-4364-910c-9106628a094b
 # ╠═a7226d4a-0de6-4683-ac66-a679e5e4b83a
+# ╠═a21ae10f-c99b-49e9-b4dd-09d3932f289c
 # ╠═d57b63e3-6cc9-4f40-bb27-107b68efc909
 # ╠═74af8bce-af71-4e54-8627-926fbd33c7cc
+# ╠═1ec2f842-9bba-4478-a159-35932d28e315
 # ╠═2a363012-6dad-47ef-a8ce-e4746cb40459
+# ╠═19d29c59-9fef-4750-bebe-472e66ca5967
+# ╠═b22d2572-d3a1-4288-9aee-301847ec78cd
+# ╠═6910aaa7-21c6-4236-a8e1-eaa829198bc4
+# ╠═6b675f95-b0d1-4ac7-9e27-98baa8f4a45d
+# ╠═3f7bb0d9-77be-403d-93b2-e4cf44bcd838
+# ╠═6aa560ed-86b8-484d-851b-32b8b0d3ee2d
+# ╠═d7343da1-1918-4c5c-a8e9-3224bd577c03
+# ╠═1f15928f-c912-40cb-a2a1-4a03f8ed432c
 # ╠═1b822a03-9d13-4413-a2bc-a0acda657808
 # ╠═7c39308c-f5d6-4270-8540-24e1979e2be2
-# ╠═f63d5845-3b23-43e5-8d23-5e44874e5ca5
 # ╠═3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
 # ╠═d7b8aa39-8965-48c0-a095-74fa2ff5257c
+# ╠═df06dff7-6bb2-4067-9efc-294189efce63
 # ╠═46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 # ╠═ff2a1617-75ac-46b5-89eb-655dec0ebd79
 # ╠═eb88fa82-9ff4-4ece-a227-7540088071de
@@ -3393,9 +3410,6 @@ version = "1.4.1+1"
 # ╠═5d598fe0-9bbf-46be-8088-c0113842d99e
 # ╠═4f5f2c11-144f-49a7-87d1-1e426f90593f
 # ╠═1e87f77c-e04e-40c0-a20c-e074a99682aa
-# ╟─b71d68e6-0b7c-4a1e-9ca9-5cd183b83f0e
-# ╠═afca5dbf-c726-4a59-9ebd-325ee0312901
-# ╠═55a3db55-9d5f-42c4-8888-6c05d968e2c7
 # ╟─d4953849-16cb-4f3f-befe-57f1fc327735
 # ╠═c10f6c81-bda1-443a-942c-6c0bcdab3c80
 # ╠═afef2dbb-c08c-4cc2-85ab-a28db96d6a0e
