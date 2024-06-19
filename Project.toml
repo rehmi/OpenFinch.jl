@@ -36,7 +36,6 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 VideoIO = "d6d074c3-1acf-5d4c-9a43-ef38773959a2"
-WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
 [compat]
 julia = "1"
