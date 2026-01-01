@@ -1,5 +1,7 @@
 [deps]
 opencv = ""
+pytorch = ""
+numpy = ""
 rpyc = ""
 
 [pip.deps]

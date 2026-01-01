@@ -7,9 +7,12 @@ using JSServe, JSServe.DOM
 using JSServe: @js_str, onjs, onload, linkjs
 using JSServe: App, Button, Checkbox, Dropdown, Session, Slider, TextField
 import JSServe.TailwindDashboard as D
-using WGLMakie, GeometryBasics, FileIO
-using WGLMakie: volume
-using Observables, Markdown
+using FileIO
+# using GeometryBasics
+# using WGLMakie
+# using WGLMakie: volume
+using Observables
+using Markdown
 
 # set_theme!(resolution=(1200, 800))
 

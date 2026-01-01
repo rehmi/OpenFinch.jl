@@ -16,8 +16,15 @@ macro bind(def, element)
     #! format: on
 end
 
+# ╔═╡ 3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
+using ImageFiltering
+
 # ╔═╡ afca5dbf-c726-4a59-9ebd-325ee0312901
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 using Metal
+  ╠═╡ =#
 
 # ╔═╡ c10f6c81-bda1-443a-942c-6c0bcdab3c80
 begin
@@ -85,139 +92,9 @@ begin
 	md"## Initialize execution environment"
 end
 
-# ╔═╡ afef2dbb-c08c-4cc2-85ab-a28db96d6a0e
-begin
-	# ENV["AF_JIT_KERNEL_TRACE"] = joinpath(homedir(), "fardel", "tmp")
-	# ENV["AF_JIT_KERNEL_TRACE"] = "stdout"
-	ENV["AF_PRINT_ERRORS"] = "1"
-	ENV["AF_DISABLE_GRAPHICS"] = "1"
-	# ENV["AF_MEM_DEBUG"] = "1"
-	# ENV["AF_TRACE"] = "jit,platform"
-	# all: All trace outputs
-	# jit: Logs kernel fetch & respective compile options and any errors.
-	# mem: Memory management allocation, free and garbage collection information
-	# platform: Device management information
-	# unified: Unified backend dynamic loading information
-	ENV["AF_CUDA_MAX_JIT_LEN"] = "100"
-	ENV["AF_OPENCL_MAX_JIT_LEN"] = "50"
-	ENV["AF_SYNCHRONOUS_CALLS"] = "0"
-
-	using Libdl
-	((x,y)->x∈y||push!(y,x))("/opt/arrayfire/lib", Libdl.DL_LOAD_PATH)
-	((x,y)->x∈y||push!(y,x))("/opt/homebrew/lib", Libdl.DL_LOAD_PATH)
-
-	# using WaveOptics
-	# using WaveOptics.ArrayFire
-	using ArrayFire
-	# ArrayFire.set_backend(UInt32(0))
-	using ArrayFire: dim_t, af_lib, af_array, af_conv_mode, af_border_type
-	using ArrayFire: _error, RefValue, af_type
-
-	# does the GPU support double floats?
-	if ArrayFire.get_dbl_support(0)
-		WOFloat = Float32
-		WOArray = AFArray
-	else
-		WOFloat = Float32
-		WOArray = AFArray
-	end
-
-	function afstat()
-		alloc_bytes, alloc_buffers, lock_bytes, lock_buffers =  device_mem_info()
-		println("alloc: $(alloc_bytes÷(1024*1024))M, $alloc_buffers bufs; locked: $(lock_bytes÷(1024*1024))M, $lock_buffers bufs")
-	end
-	
-	function af_pad(A::AFArray{T,N}, bdims::Vector{dim_t}, edims::Vector{dim_t},
-					type::af_border_type=AF_PAD_ZERO) where {T,N}
-		out = RefValue{af_array}(0)
-		_error(@ccall af_lib.af_pad(out::Ptr{af_array},
-									A.arr::af_array,
-									length(bdims)::UInt32,
-									bdims::Ptr{Vector{dim_t}},
-									length(edims)::UInt32,
-									edims::Ptr{Vector{dim_t}},
-									type::af_border_type
-		)::af_err)
-		n = max(N, length(bdims), length(edims))	# XXX might not be strictly correct
-		return AFArray{T, n}(out[])
-	end
-	
-	af_pad(A::AFArray{T, N}, bdims::Tuple, edims::Tuple, type::af_border_type=AF_PAD_ZERO) where {T, N} = af_pad(A, [bdims...], [edims...], type)
-
-	function af_conv(signal::AFArray{Ts,N}, filter::AFArray{Tf,N}; expand=false, inplace=true)::AFArray where {Ts<:Union{Complex,Real}, Tf<:Union{Complex,Real}, N}
-		cT = AFArray{ComplexF32}
-		S = cT(signal)
-		F = cT(filter)
-		sdims = size(S)
-		fdims = size(F)
-		odims = sdims .+ fdims .- 1
-		pdims = nextpow.(2, odims)
-
-		# pad beginning of signal by 1/2 width of filter
-		# line up beginning of signal with center of filter in padded arrays
-		Sbpad = fdims .÷ 2
-		# pad end of signal by (nextpow2 size) - (size of (pad + signal))
-		Sepad = pdims .- (Sbpad .+ sdims)
-
-		# don't pad beginning of filter
-		Fbpad = fdims .* 0
-		# pad end of filter to nextpow2 size
-		Fepad = pdims .- fdims
-
-		if expand == true
-			from = fdims .* 0 .+ 1
-			to = odims
-		elseif expand == :padded
-			from = fdims .* 0 .+ 1
-			to = pdims
-		elseif expand==false
-			from = fdims.÷2 .+ 1
-			to = from .+ sdims .- 1
-		else
-			error("Cannot interpret value for keyword expand: $expand")
-		end
-		index  = tuple([a:b for (a,b) in zip(from, to)]...)
-
-		pS = af_pad(S, Sbpad, Sepad, AF_PAD_ZERO)
-		pF = af_pad(F, Fbpad, Fepad, AF_PAD_ZERO)
-		shifts = -[(fdims.÷2)... [0 for i ∈ length(fdims):3]...]
-		pF = ArrayFire.shift(pF, shifts...)
-
-		# @info "data:" size(S) size(F)
-		# @info "padded data:" size(pS) size(pF)
-		# @info "fc2() calculations:" cT sdims fdims odims pdims index
-		# @info "index calculation" expand from to index
-
-		if inplace
-			fft!(pS)
-			fft!(pF)
-			pS = pS .* pF
-			ifft!(pS)
-			SF = pS
-		else
-			fS = fft(pS)
-			fF = fft(pF)
-			fSF = fS .* fF
-			SF = ifft(fSF)
-		end
-
-		if eltype(signal) <: Real && eltype(filter) <: Real
-			out = allowslow(AFArray) do; real.(SF[index...]); end
-		else
-			out = allowslow(AFArray) do; (SF[index...]); end
-		end
-
-		return out
-	end
-	
-	allowslow(AFArray, false)
-	
-	md"## ArrayFire extensions"
-end
-
 # ╔═╡ 86a65396-30db-4ace-b863-84f250a3ac4c
 md"""
-# Incoherent photon sampling
+# CGH by incoherent photon sampling
 """
 
 # ╔═╡ 32f9cb5e-3c8d-4d40-b43b-f14a3cb255f2
@@ -241,32 +118,70 @@ begin
 	URI = "ws://$host:$port/ws"
 end
 
-# ╔═╡ f61a5f1d-2a08-4a63-a068-aba5c25725c2
-round(Int, 8333*3.5)
+# ╔═╡ d57c8bdb-27cb-40f2-8299-1350669b7d1f
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+@benchmark send_image(openfinch, cgh2)
+  ╠═╡ =#
+
+# ╔═╡ d1fa707e-3ab8-4aed-bca6-7f75c95145ad
+begin
+	W_λR   = @bind λR Slider(600:1:700, default=650, show_value=true);
+	W_λG   = @bind λG Slider(500:1:600, default=532, show_value=true);
+	W_λB   = @bind λB Slider(400:1:500, default=450, show_value=true);
+
+	W_rg   = @bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)
+	W_bg   = @bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)
+	W_ag   = @bind analog_gain Slider(1.0:0.1:100.0, default=2, show_value=true)
+
+	W_LW   = @bind LED_WIDTH Slider(0:1:2560, default=1280, show_value=true)
+	W_LT   = @bind LED_TIME Slider(0:1:8333, default=0, show_value=true)
+	
+	W_brt  = @bind brightness Slider(-1:0.1:1, default=0, show_value=true)
+	W_con  = @bind contrast Slider(0:0.1:32, default=1, show_value=true)
+	W_sat  = @bind saturation Slider(0:0.1:32, default=1, show_value=true)
+	W_nrm  = @bind nrmode Slider(0:1:4, default=0, show_value=true)
+	W_shp  = @bind sharpness Slider(0:0.1:16, default=1, show_value=true)
+end;
+
+# ╔═╡ 1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
+begin
+	W_f    = @bind f Slider(0:10:2500, default=650, show_value=true)
+	W_df   = @bind df Slider(-5:0.1:5, default=0, show_value=true)
+	W_xoff = @bind xoff Slider(-100:1:100, default=0, show_value=true)
+	W_yoff = @bind yoff Slider(-100:1:100, default=0, show_value=true)
+	W_ls   = @bind lens_scale Slider(1024:1024:16384, default=1024, show_value=true)
+
+	W_is   = @bind image_scale Slider(0.1:0.1:16, default=2, show_value=true)
+	W_ui   = @bind use_image CheckBox(true)
+	W_uc   = @bind use_chart CheckBox(true)
+end;
+
+# ╔═╡ c0df3c6c-433a-40d5-8af9-27a645a2adb8
+1/(1/(750) + 1/(5*8))
 
 # ╔═╡ b183ede1-7d1a-41d8-866e-ca1c826aca08
 lens_scales = [ 256, 384, 512, 768, 1024, 1536, 2048,
 				3072, 4096, 6144, 8192, 12288, 16384
 ]
 
+# ╔═╡ 266fc634-1a9d-45f8-9f20-2d79e477f0fa
+W_Go = @bind G_only CheckBox(true);
+
 # ╔═╡ 9e0052e2-c13c-42a3-971c-d7482044c25f
 md"""
-| control | value |
-| --: | :-- |
-| $\lambda_R$ | $(@bind λR Slider(400:1:700, default=650, show_value=true)) |
-| $\lambda_G$ | $(@bind λG Slider(400:1:700, default=532, show_value=true)) |
-| $\lambda_B$ | $(@bind λB Slider(400:1:700, default=460, show_value=true)) |
-| red gain | $(@bind red_gain Slider(0.0:0.1:4.0, default=1, show_value=true)) |
-| blue gain | $(@bind blue_gain Slider(0.0:0.1:4.0, default=1.5, show_value=true)) |
-| analog gain | $(@bind analog_gain Slider(1.0:0.1:10.0, default=2, show_value=true)) |
-| LED width | $(@bind LED_WIDTH Slider(0:1:2700, default=200, show_value=true)) |
-| LED time | $(@bind LED_TIME Slider(0:1:8333, default=50, show_value=true)) |
-| Focal length | $(@bind f Slider(0:10:2000, default=400, show_value=true)) |
-| Fine focus | $(@bind df Slider(-5:0.1:5, default=0, show_value=true)) |
-| X offset | $(@bind xoff Slider(-50:1:50, default=0, show_value=true)) |
-| Y offset | $(@bind yoff Slider(-50:1:50, default=16, show_value=true)) |
-| Image scaling factor | $(@bind image_scale Slider(0.1:0.1:10, default=2, show_value=true)) |
-| Lens scale | $(@bind lens_scale Select(lens_scales, default=1024)) |
+| control | value | control | value | control | value |
+| --: | :-- | --: | :-- | --: | :-- |
+| $\lambda_R$ | $W_λR | $\lambda_G$ | $W_λG | $\lambda_B$ | $W_λB |
+| red gain | $W_rg | blue gain | $W_bg | analog gain | $W_ag |
+| Noise reduction mode | $W_nrm | Sharpness | $W_shp | |
+| Brightness | $W_brt | Contrast | $W_con | Saturation | $W_sat |
+| LED width | $W_LW | LED time | $W_LT |
+| Focal length | $W_f | Fine focus | $W_df |
+| Lens scale | $W_ls | X offset | $W_xoff | Y offset | $W_yoff |
+| Use image  | $W_ui  | Image scaling factor | $W_is | Use chart | $W_uc |
+| Use G only | $W_Go |
 """
 
 # ╔═╡ b3441c7d-a097-435d-b1da-46869b9d2193
@@ -283,6 +198,21 @@ begin
 	mandrill = testimage("mandrill");
 	nothing
 end
+
+# ╔═╡ a7226d4a-0de6-4683-ac66-a679e5e4b83a
+W_sf = @bind sharpening_factor Slider(0:0.1:20, default=0, show_value=true)
+
+# ╔═╡ d7b8aa39-8965-48c0-a095-74fa2ff5257c
+begin
+	laplacian_kernel =
+		[ 0  1  0;
+		 1 -4  1;
+		 0  1  0];
+	sobol_kernel = 
+		[ -1 -1 -1;
+		  -1  9 -1;
+		  -1 -1 -1];
+end;
 
 # ╔═╡ 46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 begin
@@ -311,17 +241,14 @@ fy2 = Float32.((Y.-(yoff*1e-3)).^2);
 # ╔═╡ 67634cc3-8c6a-415f-998c-bf597e5f9d83
 R = sqrt.(fx2 .+ fy2 .+ Z^2);
 
-# ╔═╡ 3964e5d7-abe8-4c86-8a31-e091a78ff816
-heatmap(R, aspectratio=:equal)
-
-# ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
-ϕlensR = exp.(2f0π * 1im * R / Float32(ustrip(λR*u"nm")));
-
 # ╔═╡ 2177271e-fa25-48c1-9c11-67117ae3fde2
 ϕlensG = exp.(2f0π * 1im * R / Float32(ustrip(λG*u"nm")));
 
+# ╔═╡ 397911d9-42e3-4a82-bb81-24fb77bd3cc1
+ϕlensR = G_only ? ϕlensG : exp.(2f0π * 1im * R / Float32(ustrip(λR*u"nm")));
+
 # ╔═╡ 6c212ba1-c558-47ad-a621-7c4e653bab86
-ϕlensB = exp.(2f0π * 1im * R / Float32(ustrip(λB*u"nm")));
+ϕlensB = G_only ? ϕlensG : exp.(2f0π * 1im * R / Float32(ustrip(λB*u"nm")));
 
 # ╔═╡ b71d68e6-0b7c-4a1e-9ca9-5cd183b83f0e
 md"""
@@ -338,21 +265,26 @@ md"""
 # ╠═╡ show_logs = false
 BA = load("../data/Touhou - Bad Apple.mp4");
 
+# ╔═╡ f3e3e27e-4da3-4583-bc8f-49ac384b03a6
+BA[1684]
+
+
 # ╔═╡ d57b63e3-6cc9-4f40-bb27-107b68efc909
 @bind frame Slider(1:length(BA), default=1684, show_value=true)
 
 # ╔═╡ 2b2dd536-a71a-4364-910c-9106628a094b
 begin
-	chart = reverse(imresize(usaf_chart, ratio=image_scale), dims=1);
-	ba = reverse(imresize(BA[frame], ratio=image_scale), dims=1);
-	img = chart
+	chart = usaf_chart
+	# ba = BA[frame]
+	ba = BA[frame] + imfilter(BA[frame], sharpening_factor*laplacian_kernel)
+	img = reverse(imresize(use_chart ? chart : ba, ratio=image_scale), dims=1);
 end
 
 # ╔═╡ b06f5e8e-a880-46e8-b656-d99247ec4fc5
 size(img).*dx./u"cm"
 
 # ╔═╡ a7d722af-a962-40a2-ae89-e4e520b88fd2
-ϕ_rand = exp.(2f0π * im * rand(Float32, size(img)...));
+ϕ_rand = [exp.(2f0π * im * rand(Float32, size(img)...)) for i in 1:3];
 
 # ╔═╡ 55a3db55-9d5f-42c4-8888-6c05d968e2c7
 # ╠═╡ disabled = true
@@ -387,6 +319,13 @@ end
 # ╔═╡ 74af8bce-af71-4e54-8627-926fbd33c7cc
 BA[frame]
 
+# ╔═╡ 1b822a03-9d13-4413-a2bc-a0acda657808
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+fBA = [ fft(ComplexF64.(Float64.(Gray.(b)))) for b in BA ]
+  ╠═╡ =#
+
 # ╔═╡ 5236f897-79ed-46f2-8b51-4aa5a0d78dec
 begin
 	ColorTypes.red(x::Gray) = x
@@ -395,42 +334,68 @@ begin
 end
 
 # ╔═╡ 693a5636-387b-42bf-a130-3111825e11e4
-iR = (red.(img)) .* ϕ_rand;
-
-# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
-ϕR = conv(iR, ϕlensR);
+iR = (red.(img)) .* ϕ_rand[1];
 
 # ╔═╡ 2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
-iG = (green.(img)) .* ϕ_rand;
+iG = (green.(img)) .* ϕ_rand[2];
 
 # ╔═╡ ceb402ae-ab6b-400e-a481-9bd86a22bc1a
-ϕG = conv(iG, ϕlensG);
+ϕG = use_image ? conv(iG, ϕlensG) : ϕlensG;
+
+# ╔═╡ 3162b0ae-627b-4511-b453-bb929e80203a
+ϕR = G_only ? ϕG : use_image ? conv(iR, ϕlensR) : ϕlensR;
 
 # ╔═╡ 058d33db-7b24-42a3-930f-f3ee24b6b113
-iB = (blue.(img)) .* ϕ_rand;
+iB = (blue.(img)) .* ϕ_rand[3];
 
 # ╔═╡ dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
-ϕB = conv(iB, ϕlensB);
-
-# ╔═╡ 1e87f77c-e04e-40c0-a20c-e074a99682aa
-# ╠═╡ disabled = true
-#=╠═╡
-ϕ = [ ϕR, ϕG, ϕB ];
-  ╠═╡ =#
+ϕB = G_only ? ϕG : use_image ? conv(iB, ϕlensB) : ϕlensB;
 
 # ╔═╡ 7d12e54d-5cad-4259-a742-c7b8448b4470
-function extract_central(matrix::Matrix, dims::Tuple{Int, Int})
-    rows, cols = size(matrix)
-    target_rows, target_cols = dims
+function extract_central(matrix::Matrix, dims::Tuple{Int, Int}; offset::Tuple{Int, Int}=(0, 0))
+  rows, cols = size(matrix)
+  target_rows, target_cols = dims
+  row_offset, col_offset = offset
 
-    start_row = (rows - target_rows + 1) ÷ 2 + 1
-    end_row = start_row + target_rows - 1
+  # Handle cases where dimensions are too large, considering the offset
+  target_rows = min(target_rows, rows - abs(row_offset))
+  target_cols = min(target_cols, cols - abs(col_offset))
 
-    start_col = (cols - target_cols + 1) ÷ 2 + 1
-    end_col = start_col + target_cols - 1
+  # Calculate the central starting position
+  start_row = (rows - target_rows) ÷ 2 + 1 
+  start_col = (cols - target_cols) ÷ 2 + 1
 
-    return matrix[start_row:end_row, start_col:end_col]
+  # Apply the offset
+  start_row += row_offset 
+  start_col += col_offset
+
+  # Calculate the ending positions
+  end_row = start_row + target_rows - 1
+  end_col = start_col + target_cols - 1
+
+  # Ensure the extracted region stays within the matrix bounds
+  start_row = max(start_row, 1)
+  end_row = min(end_row, rows)
+  start_col = max(start_col, 1)
+  end_col = min(end_col, cols)
+
+  return matrix[start_row:end_row, start_col:end_col]
 end
+
+# ╔═╡ 03c89827-2d8d-4833-a9d3-7f50af22f04d
+lens = extract_central(ϕlensG, (720, 1280))
+
+# ╔═╡ 8dda390d-6ef2-4d61-9783-95a71dfab82d
+frm = Fill(BA[1684], lens)
+
+# ╔═╡ 6c9aa378-f082-4c52-8af9-8abbb8c27168
+af_conv(Float32.(Gray.(BA[1684])), lens)
+
+# ╔═╡ 7cfe3d5b-7458-46f0-a8c8-d8f692241f8a
+cgh2 = Gray{N0f8}.((real.(extract_central(lens, (720,1280)))).>0)
+
+# ╔═╡ 11caa2b4-3339-4d0a-8b7e-c392b7ff8e81
+histogram(Float32.(cgh2[:]))
 
 # ╔═╡ 7f1b4f21-d822-4860-94f4-4cb610a34e39
 begin
@@ -525,9 +490,6 @@ end
 # ╔═╡ 2537ce03-ddb0-4aab-a441-1531a5e6996d
 openfinch = OpenFinchConnection(URI)
 
-# ╔═╡ e3c2f4d1-1e14-4414-b623-594f55053b7a
-openfinch
-
 # ╔═╡ 98869068-79fb-42ee-9d21-d0c7f5a8ce1e
 put!(openfinch, Dict(
 	"use_base64_encoding"=>Dict("value"=>false),
@@ -547,11 +509,16 @@ begin
 	    end
 	end
 
-	function image_to_base64(image::Array{<:Colorant})
+	function encode_image(image::Array{<:Colorant}, fmt)
 		io = IOBuffer()
-		save(Stream{format"PNG"}(io), image)  # Save the image as PNG to the IOBuffer
+		save(Stream{fmt}(io), image)  # Save the image as fmt to the IOBuffer
 		seekstart(io)  # Reset the buffer's position to the beginning
-		return base64encode(io)  # Encode the buffer's content to base64
+		return io
+	end
+	
+	function image_to_base64(image::Array{<:Colorant}; lossless=true)
+		fmt = lossless ? format"GIF" : format"JPEG"
+		return base64encode(encode_image(image, fmt))  # Encode the buffer's content to base64
 	end
 
 	function base64_to_image(buf)
@@ -559,8 +526,8 @@ begin
 		return load(IOBuffer(imbuf))
 	end
 
-	function send_image(channel, image::Array{<:Colorant})
-		encoded_image = image_to_base64(image)
+	function send_image(channel, image::Array{<:Colorant}; lossless=false)
+		encoded_image = image_to_base64(image, lossless=lossless)
 		put!(channel, Dict("slm_image" => encoded_image))
 	end
 
@@ -570,7 +537,16 @@ begin
 end
 
 # ╔═╡ b1dc96c5-67dd-4ab1-a036-fb17c7570b56
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 send_controls(openfinch, Dict("LED_TIME" => 0, "LED_WIDTH" => 10))
+  ╠═╡ =#
+
+# ╔═╡ 8a02142d-dd14-4ba8-9ad8-0bede5e16a5b
+send_controls(openfinch, Dict(
+	"ILLUMINATION_MODE" => G_only ? "222" : "421"
+))
 
 # ╔═╡ 697746d9-8baf-45a2-9eef-8c63857984b1
 send_controls(openfinch, Dict(
@@ -578,9 +554,14 @@ send_controls(openfinch, Dict(
 	"LED_WIDTH" => LED_WIDTH,
 	"ColourGains" => [red_gain, blue_gain],
 	"AnalogueGain" => analog_gain,
-	"WAVE_DURATION" => round(Int, 8333*3.5),
-	"ScalerCrop" => [3, 0, 1456, 1088]
+	# "WAVE_DURATION" => round(Int, 8333*3.5),
+	# "ScalerCrop" => [3, 0, 1456, 1088]
 	# "ScalerCrop" => [0, 0, 64, 16]
+	"NoiseReductionMode" => nrmode,
+	"Brightness" => brightness,
+	"Saturation" => saturation,
+	"Contrast" => contrast,
+	"Sharpness" => sharpness
 ));
 
 # ╔═╡ cc316130-cf9e-4dd6-97ef-a114831644ad
@@ -615,24 +596,38 @@ end
 # ╔═╡ ec89a498-e270-458c-a073-c3c26874f2ed
 ColorTypes.RGB(z::Complex) = HSV(angle(z)*180/π, 1, abs(z))
 
-# ╔═╡ 7da59f21-afdb-4a2b-aea4-eeeb645c5229
-# ╠═╡ disabled = true
-#=╠═╡
-RGB.(ϕlensR), RGB.(ϕlensG), RGB.(ϕlensB)
-  ╠═╡ =#
-
 # ╔═╡ 39570ba6-7602-4dd6-8827-b709b4a66628
 cgh = (RGB.(
 	(real.(ϕR).>0),
 	(real.(ϕG).>0),
 	(real.(ϕB).>0)
-))
+));
 
 # ╔═╡ 79667c43-705a-4c34-b073-f91eac682674
-slm_img = extract_central(cgh, (720,720))
+slm_img = extract_central(cgh, (1280, 1280))
+
+# ╔═╡ fad65ad9-0edd-4619-a1fa-e26c77242216
+# ╠═╡ disabled = true
+#=╠═╡
+for i in 1:16
+	send_image(openfinch, slm_img)
+	send_image(openfinch, rot180(slm_img))
+end
+  ╠═╡ =#
 
 # ╔═╡ 95b60065-9494-40a4-bdbb-41139ae8d86a
 send_image(openfinch, slm_img)
+
+# ╔═╡ 9b5cde50-feb2-4462-8b77-f3fbd2698ae4
+encode_image(slm_img, format"GIF").size
+
+# ╔═╡ 7c39308c-f5d6-4270-8540-24e1979e2be2
+#=╠═╡
+RGB.(fBA[frame])
+  ╠═╡ =#
+
+# ╔═╡ f63d5845-3b23-43e5-8d23-5e44874e5ca5
+RGB.(ifft(fft(Float32.(Gray.(BA[frame])))))
 
 # ╔═╡ bed6430e-89a7-4e0f-9804-827ff23f26d7
 function decode_image(msg)
@@ -864,7 +859,6 @@ send(ws, JSON.json(Dict("image_request"=>true)))
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
-ArrayFire = "b19378d9-d87a-599a-927f-45f220a2c452"
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
@@ -875,15 +869,14 @@ FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 FourierTools = "b18b359b-aebc-45ac-a139-9c0ccbb2871e"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+ImageFiltering = "6a3955dd-da59-5b1f-98d4-e7296123deb5"
 ImageIO = "82e4d734-157c-48bb-816b-45c225c6df19"
 ImageShow = "4e3cecfd-b093-5904-9786-8bbb286a6a31"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 JpegTurbo = "b835a17e-a41a-41e7-81f0-2f016b05efe0"
 LazyGrids = "7031d0ef-c40d-4431-b2f8-61a8d2f650db"
-Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 MosaicViews = "e94cdb99-869f-56ef-bcf0-1ae2bcbe0389"
 PlotlyJS = "f0f68f2c-4968-5e81-91da-67840de0976a"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
@@ -900,7 +893,6 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 VideoIO = "d6d074c3-1acf-5d4c-9a43-ef38773959a2"
 
 [compat]
-ArrayFire = "~1.0.7"
 BenchmarkTools = "~1.5.0"
 Colors = "~0.12.11"
 DSP = "~0.6.10"
@@ -910,13 +902,13 @@ FileIO = "~1.16.3"
 FourierTools = "~0.4.3"
 HTTP = "~1.10.8"
 HypertextLiteral = "~0.9.5"
+ImageFiltering = "~0.7.8"
 ImageIO = "~0.6.8"
 ImageShow = "~0.3.8"
 Images = "~0.26.1"
 JSON = "~0.21.4"
 JpegTurbo = "~0.1.5"
 LazyGrids = "~1.0.0"
-Metal = "~1.1.0"
 MosaicViews = "~0.3.4"
 PlotlyJS = "~0.18.13"
 Plots = "~1.40.4"
@@ -935,9 +927,9 @@ VideoIO = "~1.1.0"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.3"
+julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "6b9af5a1aefb11807134a26209b03b90311bdd07"
+project_hash = "d209a9ea7a56e02dd95835d41123b462c7d45ee7"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -987,12 +979,6 @@ git-tree-sha1 = "d57bd3762d308bded22c3b82d033bff85f6195c6"
 uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
 version = "0.4.0"
 
-[[deps.ArrayFire]]
-deps = ["DSP", "FFTW", "Libdl", "LinearAlgebra", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "Test"]
-git-tree-sha1 = "9153a509145fc1666b070a47ea5024c2242755be"
-uuid = "b19378d9-d87a-599a-927f-45f220a2c452"
-version = "1.0.7"
-
 [[deps.ArrayInterface]]
 deps = ["IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
 git-tree-sha1 = "d84c956c4c0548b4caf0e4e96cf5b6494b5b1529"
@@ -1006,12 +992,6 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 deps = ["Distributed", "JSON", "Pidfile", "SHA", "Test"]
 git-tree-sha1 = "b25e88db7944f98789130d7b503276bc34bc098e"
 uuid = "bf4720bc-e11a-5d0c-854e-bdca1663c893"
-version = "0.1.0"
-
-[[deps.Atomix]]
-deps = ["UnsafeAtomics"]
-git-tree-sha1 = "c06a868224ecba914baa6942988e2f2aade419be"
-uuid = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
 version = "0.1.0"
 
 [[deps.AxisAlgorithms]]
@@ -1139,12 +1119,6 @@ deps = ["InteractiveUtils", "UUIDs"]
 git-tree-sha1 = "c0216e792f518b39b22212127d4a84dc31e4e386"
 uuid = "da1fd8a2-8d9e-5ec2-8556-3022fb5608a2"
 version = "1.3.5"
-
-[[deps.CodecBzip2]]
-deps = ["Bzip2_jll", "Libdl", "TranscodingStreams"]
-git-tree-sha1 = "9b1ca1aa6ce3f71b3d1840c538a8210a043625eb"
-uuid = "523fee87-0ab8-5b00-afb7-3ecf72e48cfd"
-version = "0.8.2"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -1489,24 +1463,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jl
 git-tree-sha1 = "ff38ba61beff76b8f4acad8ab0c97ef73bb670cb"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.3.9+0"
-
-[[deps.GPUArrays]]
-deps = ["Adapt", "GPUArraysCore", "LLVM", "LinearAlgebra", "Printf", "Random", "Reexport", "Serialization", "Statistics"]
-git-tree-sha1 = "38cb19b8a3e600e509dc36a6396ac74266d108c1"
-uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "10.1.1"
-
-[[deps.GPUArraysCore]]
-deps = ["Adapt"]
-git-tree-sha1 = "ec632f177c0d990e64d955ccc1b8c04c485a0950"
-uuid = "46192b85-c4d5-4398-a991-12ede77f4527"
-version = "0.1.6"
-
-[[deps.GPUCompiler]]
-deps = ["ExprTools", "InteractiveUtils", "LLVM", "Libdl", "Logging", "Scratch", "TimerOutputs", "UUIDs"]
-git-tree-sha1 = "1600477fba37c9fc067b9be21f5e8101f24a8865"
-uuid = "61eb1bfa-7361-4325-ad38-22787b887f55"
-version = "0.26.4"
 
 [[deps.GR]]
 deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Preferences", "Printf", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "UUIDs", "p7zip_jll"]
@@ -1878,18 +1834,6 @@ git-tree-sha1 = "43032da5832754f58d14a91ffbe86d5f176acda9"
 uuid = "f7e6163d-2fa5-5f23-b69c-1db539e41963"
 version = "0.2.1+0"
 
-[[deps.KernelAbstractions]]
-deps = ["Adapt", "Atomix", "InteractiveUtils", "LinearAlgebra", "MacroTools", "PrecompileTools", "Requires", "SparseArrays", "StaticArrays", "UUIDs", "UnsafeAtomics", "UnsafeAtomicsLLVM"]
-git-tree-sha1 = "db02395e4c374030c53dc28f3c1d33dec35f7272"
-uuid = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
-version = "0.9.19"
-
-    [deps.KernelAbstractions.extensions]
-    EnzymeExt = "EnzymeCore"
-
-    [deps.KernelAbstractions.weakdeps]
-    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
-
 [[deps.LAME_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "170b660facf5df5de098d866564877e119141cbd"
@@ -1901,30 +1845,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "bf36f528eec6634efc60d7ec062008f171071434"
 uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
 version = "3.0.0+1"
-
-[[deps.LLVM]]
-deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Preferences", "Printf", "Requires", "Unicode"]
-git-tree-sha1 = "839c82932db86740ae729779e610f07a1640be9a"
-uuid = "929cbde3-209d-540e-8aea-75f648917ca0"
-version = "6.6.3"
-
-    [deps.LLVM.extensions]
-    BFloat16sExt = "BFloat16s"
-
-    [deps.LLVM.weakdeps]
-    BFloat16s = "ab4f0b2a-ad5b-11e8-123f-65d77653426b"
-
-[[deps.LLVMDowngrader_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML", "Zlib_jll"]
-git-tree-sha1 = "5e1965206f3b43d6c89d18fcd4f26808f1bf317c"
-uuid = "f52de702-fb25-5922-94ba-81dd59b07444"
-version = "0.1.0+2"
-
-[[deps.LLVMExtra_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "88b916503aac4fb7f701bb625cd84ca5dd1677bc"
-uuid = "dad2f222-ce93-54a1-a47d-0025e8a3acab"
-version = "0.0.29+0"
 
 [[deps.LLVMOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2002,12 +1922,6 @@ uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
 deps = ["Artifacts", "LibSSH2_jll", "Libdl", "MbedTLS_jll"]
 uuid = "e37daf67-58a4-590a-8e99-b0245dd2ffc5"
 version = "1.6.4+0"
-
-[[deps.LibMPDec_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "6eaa22a233f28bc5d6092f3f8e685f85080fba11"
-uuid = "7106de7a-f406-5ef1-84f7-3345f7341bd2"
-version = "2.5.1+0"
 
 [[deps.LibSSH2_jll]]
 deps = ["Artifacts", "Libdl", "MbedTLS_jll"]
@@ -2176,20 +2090,6 @@ git-tree-sha1 = "1130dbe1d5276cb656f6e1094ce97466ed700e5a"
 uuid = "626554b9-1ddb-594c-aa3c-2596fe9399a5"
 version = "0.7.2"
 
-[[deps.Metal]]
-deps = ["Adapt", "Artifacts", "CEnum", "CodecBzip2", "ExprTools", "GPUArrays", "GPUCompiler", "KernelAbstractions", "LLVM", "LLVMDowngrader_jll", "LinearAlgebra", "ObjectFile", "ObjectiveC", "Preferences", "Printf", "Python_jll", "Random", "Reexport", "Requires", "SHA", "StaticArrays", "UUIDs"]
-git-tree-sha1 = "b5bf24e5ef1492a69ed9d64f93853bb17c1fdf39"
-uuid = "dde4c033-4e86-420c-a63e-0dd931031962"
-version = "1.1.0"
-
-    [deps.Metal.extensions]
-    BFloat16sExt = "BFloat16s"
-    SpecialFunctionsExt = "SpecialFunctions"
-
-    [deps.Metal.weakdeps]
-    BFloat16s = "ab4f0b2a-ad5b-11e8-123f-65d77653426b"
-    SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-
 [[deps.MicroCollections]]
 deps = ["BangBang", "InitialValues", "Setfield"]
 git-tree-sha1 = "629afd7d10dbc6935ec59b32daeb33bc4460a42e"
@@ -2272,18 +2172,6 @@ version = "1.1.1"
 [[deps.NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
-
-[[deps.ObjectFile]]
-deps = ["Reexport", "StructIO"]
-git-tree-sha1 = "195e0a19842f678dd3473ceafbe9d82dfacc583c"
-uuid = "d8793406-e978-5875-9003-1fc021f44a92"
-version = "0.4.1"
-
-[[deps.ObjectiveC]]
-deps = ["CEnum", "Libdl", "Preferences"]
-git-tree-sha1 = "911629e704cdb7e3b6a5e30faaaadb10eba1f2ad"
-uuid = "e86c9b32-1129-44ac-8ea0-90d5bb39ded9"
-version = "2.1.1"
 
 [[deps.Observables]]
 git-tree-sha1 = "7438a59546cf62428fc9d1bc94729146d37a7225"
@@ -2560,12 +2448,6 @@ git-tree-sha1 = "763a8ceb07833dd51bb9e3bbca372de32c0605ad"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.10.0"
 
-[[deps.Python_jll]]
-deps = ["Artifacts", "Bzip2_jll", "Expat_jll", "JLLWrappers", "LibMPDec_jll", "Libdl", "Libffi_jll", "OpenSSL_jll", "Pkg", "SQLite_jll", "XZ_jll", "Zlib_jll"]
-git-tree-sha1 = "07aa31a2eeea4e93d1ce92696dc64fb76a7f632c"
-uuid = "93d3a430-8e7c-50da-8e8d-3dfcfb3baf05"
-version = "3.10.8+1"
-
 [[deps.QOI]]
 deps = ["ColorTypes", "FileIO", "FixedPointNumbers"]
 git-tree-sha1 = "18e8f4d1426e965c7b532ddd260599e1510d26ce"
@@ -2696,12 +2578,6 @@ deps = ["IfElse", "Static", "VectorizationBase"]
 git-tree-sha1 = "3aac6d68c5e57449f5b9b865c9ba50ac2970c4cf"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
 version = "0.6.42"
-
-[[deps.SQLite_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "004fffbe2711abdc7263a980bbb1af9620781dd9"
-uuid = "76ed43ae-9a5d-5a62-8c75-30186b810ce8"
-version = "3.45.3+0"
 
 [[deps.Scratch]]
 deps = ["Dates"]
@@ -2838,12 +2714,6 @@ deps = ["Distances", "StatsAPI"]
 git-tree-sha1 = "5b2ca70b099f91e54d98064d5caf5cc9b541ad06"
 uuid = "88034a9c-02f8-509d-84a9-84ec65e18404"
 version = "0.11.3"
-
-[[deps.StructIO]]
-deps = ["Test"]
-git-tree-sha1 = "010dc73c7146869c042b49adcdb6bf528c12e859"
-uuid = "53d494c1-5632-5724-8f4c-31dff12d585f"
-version = "0.3.0"
 
 [[deps.SuiteSparse_jll]]
 deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
@@ -3010,17 +2880,6 @@ git-tree-sha1 = "e2d817cc500e960fdbafcf988ac8436ba3208bfd"
 uuid = "45397f5d-5981-4c77-b2b3-fc36d6e9b728"
 version = "1.6.3"
 
-[[deps.UnsafeAtomics]]
-git-tree-sha1 = "6331ac3440856ea1988316b46045303bef658278"
-uuid = "013be700-e6cd-48c3-b4a1-df204f14c38f"
-version = "0.2.1"
-
-[[deps.UnsafeAtomicsLLVM]]
-deps = ["LLVM", "UnsafeAtomics"]
-git-tree-sha1 = "d9f5962fecd5ccece07db1ff006fb0b5271bdfdd"
-uuid = "d80eeb9a-aca5-4d75-85e5-170c8b632249"
-version = "0.1.4"
-
 [[deps.Unzip]]
 git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
@@ -3085,12 +2944,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Libgcrypt_jll", "Libgpg_error_jll"
 git-tree-sha1 = "91844873c4085240b95e795f692c4cec4d805f8a"
 uuid = "aed1982a-8fda-507f-9586-7b0439959a61"
 version = "1.1.34+0"
-
-[[deps.XZ_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "ac88fb95ae6447c8dda6a5503f3bafd496ae8632"
-uuid = "ffd25f8a-64ca-5728-b0f7-c24cf3aae800"
-version = "5.4.6+0"
 
 [[deps.Xorg_libX11_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libxcb_jll", "Xorg_xtrans_jll"]
@@ -3317,31 +3170,47 @@ version = "1.4.1+1"
 # ╟─ffcbbfe2-a8a0-474f-a1c8-b419bacc90e2
 # ╟─5c459507-67eb-41fd-9ce6-3cd489601064
 # ╠═2537ce03-ddb0-4aab-a441-1531a5e6996d
-# ╠═e3c2f4d1-1e14-4414-b623-594f55053b7a
 # ╠═b1dc96c5-67dd-4ab1-a036-fb17c7570b56
-# ╠═f61a5f1d-2a08-4a63-a068-aba5c25725c2
 # ╠═98869068-79fb-42ee-9d21-d0c7f5a8ce1e
 # ╟─a6003b6c-beea-49ca-bbd3-fcdb62562b2b
-# ╠═697746d9-8baf-45a2-9eef-8c63857984b1
 # ╟─9e0052e2-c13c-42a3-971c-d7482044c25f
-# ╠═7da59f21-afdb-4a2b-aea4-eeeb645c5229
+# ╠═fad65ad9-0edd-4619-a1fa-e26c77242216
+# ╠═79667c43-705a-4c34-b073-f91eac682674
+# ╠═95b60065-9494-40a4-bdbb-41139ae8d86a
+# ╠═03c89827-2d8d-4833-a9d3-7f50af22f04d
+# ╠═7cfe3d5b-7458-46f0-a8c8-d8f692241f8a
+# ╠═8dda390d-6ef2-4d61-9783-95a71dfab82d
+# ╠═6c9aa378-f082-4c52-8af9-8abbb8c27168
+# ╠═f3e3e27e-4da3-4583-bc8f-49ac384b03a6
+# ╠═d57c8bdb-27cb-40f2-8299-1350669b7d1f
+# ╠═9b5cde50-feb2-4462-8b77-f3fbd2698ae4
+# ╠═11caa2b4-3339-4d0a-8b7e-c392b7ff8e81
+# ╟─d1fa707e-3ab8-4aed-bca6-7f75c95145ad
+# ╟─1dcbea3d-11b9-4395-9e7c-5d5a1c658b28
+# ╠═8a02142d-dd14-4ba8-9ad8-0bede5e16a5b
+# ╠═697746d9-8baf-45a2-9eef-8c63857984b1
+# ╠═c0df3c6c-433a-40d5-8af9-27a645a2adb8
 # ╠═ec89a498-e270-458c-a073-c3c26874f2ed
 # ╠═b06f5e8e-a880-46e8-b656-d99247ec4fc5
 # ╟─b183ede1-7d1a-41d8-866e-ca1c826aca08
-# ╠═79667c43-705a-4c34-b073-f91eac682674
 # ╠═39570ba6-7602-4dd6-8827-b709b4a66628
+# ╠═266fc634-1a9d-45f8-9f20-2d79e477f0fa
 # ╟─b3441c7d-a097-435d-b1da-46869b9d2193
 # ╠═a58c5e86-b282-43a7-b74a-7dc8f1e49976
 # ╠═2b2dd536-a71a-4364-910c-9106628a094b
+# ╠═a7226d4a-0de6-4683-ac66-a679e5e4b83a
 # ╠═d57b63e3-6cc9-4f40-bb27-107b68efc909
 # ╠═74af8bce-af71-4e54-8627-926fbd33c7cc
-# ╠═95b60065-9494-40a4-bdbb-41139ae8d86a
+# ╠═1b822a03-9d13-4413-a2bc-a0acda657808
+# ╠═7c39308c-f5d6-4270-8540-24e1979e2be2
+# ╠═f63d5845-3b23-43e5-8d23-5e44874e5ca5
+# ╠═3e3f2f5f-5254-4ef9-82e9-a5b5304ae2e2
+# ╠═d7b8aa39-8965-48c0-a095-74fa2ff5257c
 # ╠═46836ffe-3b43-4c3b-a4d3-a56e8137aebf
 # ╠═ff2a1617-75ac-46b5-89eb-655dec0ebd79
 # ╠═eb88fa82-9ff4-4ece-a227-7540088071de
 # ╠═ecb25ecf-1273-4ab4-a279-d826814c241d
 # ╠═67634cc3-8c6a-415f-998c-bf597e5f9d83
-# ╠═3964e5d7-abe8-4c86-8a31-e091a78ff816
 # ╠═a7d722af-a962-40a2-ae89-e4e520b88fd2
 # ╠═693a5636-387b-42bf-a130-3111825e11e4
 # ╠═2ca7c5ec-ac16-4dd0-9b8e-dcf303267a82
@@ -3352,18 +3221,16 @@ version = "1.4.1+1"
 # ╠═3162b0ae-627b-4511-b453-bb929e80203a
 # ╠═ceb402ae-ab6b-400e-a481-9bd86a22bc1a
 # ╠═dd681c53-b7e1-4ff3-9893-37ed8f6bcf57
-# ╠═1e87f77c-e04e-40c0-a20c-e074a99682aa
 # ╟─b71d68e6-0b7c-4a1e-9ca9-5cd183b83f0e
 # ╠═afca5dbf-c726-4a59-9ebd-325ee0312901
 # ╠═55a3db55-9d5f-42c4-8888-6c05d968e2c7
 # ╟─d4953849-16cb-4f3f-befe-57f1fc327735
 # ╠═c10f6c81-bda1-443a-942c-6c0bcdab3c80
-# ╠═afef2dbb-c08c-4cc2-85ab-a28db96d6a0e
 # ╠═8d230e31-8b13-4c59-ac4d-1efc102a5623
 # ╠═5236f897-79ed-46f2-8b51-4aa5a0d78dec
 # ╠═7d12e54d-5cad-4259-a742-c7b8448b4470
-# ╟─5084973f-e4e4-4d43-a155-d848efce3f01
-# ╟─7f1b4f21-d822-4860-94f4-4cb610a34e39
+# ╠═5084973f-e4e4-4d43-a155-d848efce3f01
+# ╠═7f1b4f21-d822-4860-94f4-4cb610a34e39
 # ╟─cc316130-cf9e-4dd6-97ef-a114831644ad
 # ╟─bed6430e-89a7-4e0f-9804-827ff23f26d7
 # ╟─b99b1ae4-1855-4952-b1ab-f31734060cbb

@@ -51,7 +51,7 @@ def parse_arguments(args):
             value = True
         elif value.lower() == 'false':
             value = False
-        else:
+        elif key != "ILLUMINATION_MODE":
             # Attempt to directly parse the value as a float or integer
             try:
                 value = float(value)

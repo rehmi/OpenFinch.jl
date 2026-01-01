@@ -2,7 +2,7 @@
 
 OpenFinchServer is a server application designed for camera control and image processing. It supports various camera models, including IMX296 and OV2311, and integrates functionalities for real-time image capture, processing, and GPIO interactions. The server is built with Python and offers a web interface for remote operations.
 
-## Features
+## Key features
 
 - **Camera Control**: Customizable settings for exposure, gain, and other parameters for supported camera models.
 - **GPIO Integration**: Interfaces for controlling GPIO pins for synchronized operations with external hardware.
@@ -15,8 +15,26 @@ OpenFinchServer is a server application designed for camera control and image pr
 
 ### Prerequisites
 
-- Python 3.6 or higher
+- Python 3.8 or higher
 - Required libraries: pigpio, OpenCV-Python, aiohttp, numpy, pillow, screeninfo, v4l2py, picamera2
+
+#### Hardware:
+
+- Raspberry Pi 2 Zero, Pi 3, or Pi 4.
+  - **Raspberry Pi 5 not supported at this time (see [pigpio/issues/589](https://github.com/joan2937/pigpio/issues/589)).**
+- Compatible camera module:
+  - IMX296 sensor (Raspberry Pi Global Shutter camera or equivalent)
+  - Other cameras supported by picamera2 or v4l2
+- GPIO accessories (as needed for your specific application)
+
+#### Software:
+
+- Raspberry Pi OS (formerly Raspbian) with Python 3.8 or higher
+- pigpio daemon for GPIO control
+- libcamera and its dependencies (for picamera2 support)
+- Additional Python libraries as listed in the Installation section
+
+Note: Ensure your Raspberry Pi's firmware and OS are up-to-date for the best compatibility with camera modules and GPIO functionality.
 
 ### Setup
 
