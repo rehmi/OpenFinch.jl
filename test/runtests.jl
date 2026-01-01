@@ -5,6 +5,7 @@ using Test
 
 @testset "OpenFinch.jl" begin
     # Write your tests here.
+    include("test_fft.jl")
 
     # @everywhere function framegrab()
     #     cam = VideoIO.opencamera()
