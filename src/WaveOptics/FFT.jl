@@ -158,15 +158,20 @@ end
 @generate_radix_kernel(11, fft)
 @generate_radix_kernel(13, fft)
 
-function fft!(x, backend)
+function fft!(x_in, backend)
+    x = x_in
     N = length(x)
     
     factors = Tuple(factorize(N))
     
+    if isempty(factors)
+        return x_in
+    end
+
     y = similar(x)
     perm_kernel = mixed_radix_permutation_kernel!(backend, 256)
     perm_kernel(y, x, factors, ndrange=N)
-    x .= y
+    x, y = y, x
     
     m = 1
     p = 1
@@ -179,12 +184,16 @@ function fft!(x, backend)
             kernel = @eval $kernel_func($backend, 256)
             kernel(y, x, N, m, p, ndrange=N÷f)
         end
-        x .= y
+        x, y = y, x
         m *= f
         p += 1
     end
     
-    return x
+    if x !== x_in
+        x_in .= x
+    end
+    
+    return x_in
 end
 
 function fft!(x)
@@ -197,16 +206,22 @@ end
 @generate_radix_kernel(11, ifft)
 @generate_radix_kernel(13, ifft)
 
-function ifft!(x)
+function ifft!(x_in)
+    x = x_in
     N = length(x)
     backend = KernelAbstractions.get_backend(x)
     
     factors = Tuple(factorize(N))
     
+    if isempty(factors)
+        x_in ./= N
+        return x_in
+    end
+
     y = similar(x)
     perm_kernel = mixed_radix_permutation_kernel!(backend, 256)
     perm_kernel(y, x, factors, ndrange=N)
-    x .= y
+    x, y = y, x
     
     m = 1
     p = 1
@@ -219,14 +234,18 @@ function ifft!(x)
             kernel = @eval $kernel_func($backend, 256)
             kernel(y, x, N, m, p, ndrange=N÷f)
         end
-        x .= y
+        x, y = y, x
         m *= f
         p += 1
     end
     
     x ./= N
     
-    return x
+    if x !== x_in
+        x_in .= x
+    end
+    
+    return x_in
 end
 
 @kernel function transpose_kernel!(y, x)
@@ -234,7 +253,7 @@ end
     y[j, i] = x[i, j]
 end
 
-@kernel function fft_row_butterfly_kernel!(x, m, p)
+@kernel function fft_row_butterfly_kernel!(y, x, m, p)
     row, i_half = @index(Global, NTuple)
 
     i_minus_1 = i_half - 1
@@ -249,8 +268,27 @@ end
     # Butterfly operation
     a = x[row, j + 1]
     b = x[row, j + m + 1] * twiddle
-    x[row, j + 1] = a + b
-    x[row, j + m + 1] = a - b
+    y[row, j + 1] = a + b
+    y[row, j + m + 1] = a - b
+end
+
+@kernel function ifft_row_butterfly_kernel!(y, x, m, p)
+    row, i_half = @index(Global, NTuple)
+
+    i_minus_1 = i_half - 1
+    # Determine the indices for the butterfly operation
+    i0 = i_minus_1 & (m - 1)
+    i1 = (i_minus_1 >> (p - 1)) << p
+    j = i0 + i1
+
+    # Twiddle factor
+    twiddle = exp(2im * Float32(pi) * i0 / (2 * m))
+
+    # Butterfly operation
+    a = x[row, j + 1]
+    b = x[row, j + m + 1] * twiddle
+    y[row, j + 1] = a + b
+    y[row, j + m + 1] = a - b
 end
 
 @kernel function bit_reverse_permutation_kernel_2d!(y, x)
@@ -266,28 +304,164 @@ end
     y[i, j_rev+1] = x[i, j]
 end
 
+@kernel function mixed_radix_permutation_kernel_2d!(y, x, factors)
+    row, col = @index(Global, NTuple)
+    
+    j = 0
+    n = col - 1
+    rev_factors = reverse(factors)
+    for f in rev_factors
+        j = j * f + (n % f)
+        n ÷= f
+    end
+    
+    y[row, j+1] = x[row, col]
+end
+
+macro generate_radix_row_kernel(radix, direction)
+    func_name = Symbol("$(direction)_radix$(radix)_row_kernel!")
+    
+    body = quote
+        row, i = @index(Global, NTuple)
+        
+        i_minus_1 = i - 1
+        i0 = i_minus_1 % m
+        i1 = div(i_minus_1, m) * $(radix) * m
+        j = i0 + i1
+    end
+
+    val_vars = [Symbol("val_$k") for k in 0:(radix-1)]
+    
+    # First val
+    push!(body.args, :(local $(val_vars[1]) = x[row, j + 1]))
+    
+    # Other vals with twiddles
+    for k in 1:(radix-1)
+        twiddle_expr = :(exp(($(direction == :fft ? -1 : 1)) * 2im * Float32(pi) * i0 * $(k) / ($(radix) * m)))
+        push!(body.args, :(local $(val_vars[k+1]) = x[row, j + $(k)*m + 1] * $(twiddle_expr)))
+    end
+    
+    # DFT matrix calculation
+    for k in 0:(radix-1)
+        # Unroll sum
+        sum_expr = val_vars[1] # l=0 term
+        for l in 1:(radix-1)
+            w_expr = :(exp(($(direction == :fft ? -1 : 1)) * 2im * Float32(pi) * $(k * l) / $(radix)))
+            term = :($(val_vars[l+1]) * $(w_expr))
+            sum_expr = :($(sum_expr) + $(term))
+        end
+        push!(body.args, :(y[row, j + $(k)*m + 1] = $(sum_expr)))
+    end
+
+    func_def = quote
+        @kernel function $(func_name)(y, x, m, p)
+            $(body.args...)
+        end
+    end
+    
+    return esc(func_def)
+end
+
+@generate_radix_row_kernel(3, fft)
+@generate_radix_row_kernel(5, fft)
+@generate_radix_row_kernel(7, fft)
+@generate_radix_row_kernel(11, fft)
+@generate_radix_row_kernel(13, fft)
+
+function fft_rows!(x_in, backend)
+    x = x_in
+    N, M = size(x)
+    factors = Tuple(factorize(M))
+    
+    if isempty(factors)
+        return x_in
+    end
+
+    y = similar(x)
+    perm_kernel = mixed_radix_permutation_kernel_2d!(backend, 256)
+    perm_kernel(y, x, factors, ndrange=(N, M))
+    x, y = y, x
+    
+    m = 1
+    p = 1
+    for f in factors
+        if f == 2
+            kernel = fft_row_butterfly_kernel!(backend, 256)
+            kernel(y, x, m, p, ndrange=(N, M÷2))
+        else
+            kernel_func = Symbol("fft_radix$(f)_row_kernel!")
+            kernel = @eval $kernel_func($backend, 256)
+            kernel(y, x, m, p, ndrange=(N, M÷f))
+        end
+        x, y = y, x
+        m *= f
+        p += 1
+    end
+    
+    if x !== x_in
+        x_in .= x
+    end
+    
+    return x_in
+end
+
+@generate_radix_row_kernel(3, ifft)
+@generate_radix_row_kernel(5, ifft)
+@generate_radix_row_kernel(7, ifft)
+@generate_radix_row_kernel(11, ifft)
+@generate_radix_row_kernel(13, ifft)
+
+function ifft_rows!(x_in, backend)
+    x = x_in
+    N, M = size(x)
+    factors = Tuple(factorize(M))
+    
+    if isempty(factors)
+        return x_in
+    end
+
+    y = similar(x)
+    perm_kernel = mixed_radix_permutation_kernel_2d!(backend, 256)
+    perm_kernel(y, x, factors, ndrange=(N, M))
+    x, y = y, x
+    
+    m = 1
+    p = 1
+    for f in factors
+        if f == 2
+            kernel = ifft_row_butterfly_kernel!(backend, 256)
+            kernel(y, x, m, p, ndrange=(N, M÷2))
+        else
+            kernel_func = Symbol("ifft_radix$(f)_row_kernel!")
+            kernel = @eval $kernel_func($backend, 256)
+            kernel(y, x, m, p, ndrange=(N, M÷f))
+        end
+        x, y = y, x
+        m *= f
+        p += 1
+    end
+    
+    if x !== x_in
+        x_in .= x
+    end
+    
+    return x_in
+end
+
 function fft2!(x, backend)
     N, M = size(x)
     
-    # FFT each row
-    for i in 1:N
-        fft!(view(x, i, :), backend)
-    end
+    fft_rows!(x, backend)
     
     # Transpose
     y = similar(x)
     transpose_kernel = transpose_kernel!(backend, (16, 16))
     transpose_kernel(y, x, ndrange=(N, M))
-    x .= y
     
-    # FFT each "column" (which is now a row)
-    for i in 1:M
-        fft!(view(x, i, :), backend)
-    end
+    fft_rows!(y, backend)
     
     # Transpose back
-    transpose_kernel(y, x, ndrange=(M, N))
-    x .= y
+    transpose_kernel(x, y, ndrange=(M, N))
     
     return x
 end
