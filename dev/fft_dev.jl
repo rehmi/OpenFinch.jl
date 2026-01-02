@@ -4,7 +4,7 @@ using Metal
 using BenchmarkTools
 using Test
 
-sizes = [4096]
+sizes = [2*13, 3*11, 5*7, 16, 4096, 4095]
 for N in sizes
     println("Testing 1D FFT for size $N")
     x_cpu = rand(ComplexF32, N)

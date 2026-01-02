@@ -6,7 +6,7 @@ using AbstractFFTs
 
 export fft!, fft2!
 
-@kernel function fft_butterfly_kernel!(x, N, m, p)
+@kernel function fft_butterfly_kernel!(y, x, N, m, p)
     i = @index(Global, Linear)
 
     # i is the thread index, from 1 to N/2
@@ -25,8 +25,8 @@ export fft!, fft2!
     # Butterfly operation
     a = x[j + 1]
     b = x[j + m + 1] * twiddle
-    x[j + 1] = a + b
-    x[j + m + 1] = a - b
+    y[j + 1] = a + b
+    y[j + m + 1] = a - b
 end
 
 @kernel function bit_reverse_permutation_kernel!(y, x)
@@ -42,25 +42,189 @@ end
     y[j+1] = x[i]
 end
 
+@kernel function ifft_butterfly_kernel!(y, x, N, m, p)
+    i = @index(Global, Linear)
+
+    i_minus_1 = i - 1
+    # Determine the indices for the butterfly operation
+    i0 = i_minus_1 & (m - 1)
+    i1 = (i_minus_1 >> (p - 1)) << p
+    j = i0 + i1
+
+    # Twiddle factor
+    twiddle = exp(2im * Float32(pi) * i0 / (2 * m))
+
+    # Butterfly operation
+    a = x[j + 1]
+    b = x[j + m + 1] * twiddle
+    y[j + 1] = a + b
+    y[j + m + 1] = a - b
+end
+
+@kernel function bluestein_prep_kernel!(x_padded, x, b)
+    i = @index(Global, Linear)
+    N = length(x)
+    if i <= N
+        x_padded[i] = x[i] * b[i]
+    else
+        x_padded[i] = 0
+    end
+end
+
+@kernel function bluestein_postp_kernel!(y, y_conv, b)
+    i = @index(Global, Linear)
+    y[i] = y_conv[i] * b[i]
+end
+
+@kernel function mixed_radix_permutation_kernel!(y, x, factors)
+    i = @index(Global, Linear)
+    N = length(x)
+    
+    j = 0
+    n = i - 1
+    stride = 1
+    rev_factors = reverse(factors)
+    for f in rev_factors
+        j = j * f + (n % f)
+        n ÷= f
+    end
+    
+    y[j+1] = x[i]
+end
+
+function factorize(N)
+    factors = Int[]
+    d = 2
+    while d * d <= N
+        while N % d == 0
+            push!(factors, d)
+            N ÷= d
+        end
+        d += 1
+    end
+    if N > 1
+        push!(factors, N)
+    end
+    return factors
+end
+
+macro generate_radix_kernel(radix, direction)
+    func_name = Symbol("$(direction)_radix$(radix)_kernel!")
+    
+    body = quote
+        i = @index(Global, Linear)
+        
+        i_minus_1 = i - 1
+        i0 = i_minus_1 % m
+        i1 = div(i_minus_1, m) * $(radix) * m
+        j = i0 + i1
+    end
+
+    val_vars = [Symbol("val_$k") for k in 0:(radix-1)]
+    
+    # First val
+    push!(body.args, :(local $(val_vars[1]) = x[j + 1]))
+    
+    # Other vals with twiddles
+    for k in 1:(radix-1)
+        twiddle_expr = :(exp(($(direction == :fft ? -1 : 1)) * 2im * Float32(pi) * i0 * $(k) / ($(radix) * m)))
+        push!(body.args, :(local $(val_vars[k+1]) = x[j + $(k)*m + 1] * $(twiddle_expr)))
+    end
+    
+    # DFT matrix calculation
+    for k in 0:(radix-1)
+        # Unroll sum
+        sum_expr = val_vars[1] # l=0 term
+        for l in 1:(radix-1)
+            w_expr = :(exp(($(direction == :fft ? -1 : 1)) * 2im * Float32(pi) * $(k * l) / $(radix)))
+            term = :($(val_vars[l+1]) * $(w_expr))
+            sum_expr = :($(sum_expr) + $(term))
+        end
+        push!(body.args, :(y[j + $(k)*m + 1] = $(sum_expr)))
+    end
+
+    func_def = quote
+        @kernel function $(func_name)(y, x, N, m, p)
+            $(body.args...)
+        end
+    end
+    
+    return esc(func_def)
+end
+
+@generate_radix_kernel(3, fft)
+@generate_radix_kernel(5, fft)
+@generate_radix_kernel(7, fft)
+@generate_radix_kernel(11, fft)
+@generate_radix_kernel(13, fft)
+
+function fft!(x, backend)
+    N = length(x)
+    
+    factors = Tuple(factorize(N))
+    
+    y = similar(x)
+    perm_kernel = mixed_radix_permutation_kernel!(backend, 256)
+    perm_kernel(y, x, factors, ndrange=N)
+    x .= y
+    
+    m = 1
+    p = 1
+    for f in factors
+        if f == 2
+            kernel = fft_butterfly_kernel!(backend, 256)
+            kernel(y, x, N, m, p, ndrange=N÷2)
+        else
+            kernel_func = Symbol("fft_radix$(f)_kernel!")
+            kernel = @eval $kernel_func($backend, 256)
+            kernel(y, x, N, m, p, ndrange=N÷f)
+        end
+        x .= y
+        m *= f
+        p += 1
+    end
+    
+    return x
+end
+
 function fft!(x)
+    return fft!(x, KernelAbstractions.get_backend(x))
+end
+
+@generate_radix_kernel(3, ifft)
+@generate_radix_kernel(5, ifft)
+@generate_radix_kernel(7, ifft)
+@generate_radix_kernel(11, ifft)
+@generate_radix_kernel(13, ifft)
+
+function ifft!(x)
     N = length(x)
     backend = KernelAbstractions.get_backend(x)
     
-    # Bit reversal permutation
+    factors = Tuple(factorize(N))
+    
     y = similar(x)
-    kernel = bit_reverse_permutation_kernel!(backend, 256)
-    kernel(y, x, ndrange=N)
+    perm_kernel = mixed_radix_permutation_kernel!(backend, 256)
+    perm_kernel(y, x, factors, ndrange=N)
     x .= y
     
-    # Iterative Cooley-Tukey
-    p = 1
     m = 1
-    while m < N
-        kernel = fft_butterfly_kernel!(backend, 256)
-        kernel(x, N, m, p, ndrange=N÷2)
-        m *= 2
+    p = 1
+    for f in factors
+        if f == 2
+            kernel = ifft_butterfly_kernel!(backend, 256)
+            kernel(y, x, N, m, p, ndrange=N÷2)
+        else
+            kernel_func = Symbol("ifft_radix$(f)_kernel!")
+            kernel = @eval $kernel_func($backend, 256)
+            kernel(y, x, N, m, p, ndrange=N÷f)
+        end
+        x .= y
+        m *= f
         p += 1
     end
+    
+    x ./= N
     
     return x
 end
@@ -102,44 +266,23 @@ end
     y[i, j_rev+1] = x[i, j]
 end
 
-function fft2!(x)
+function fft2!(x, backend)
     N, M = size(x)
-    backend = KernelAbstractions.get_backend(x)
-    
-    # Bit reversal permutation
-    y = similar(x)
-    kernel = bit_reverse_permutation_kernel_2d!(backend, (16, 16))
-    kernel(y, x, ndrange=(N, M))
-    x .= y
     
     # FFT each row
-    m = 1
-    p = 1
-    while m < M
-        kernel = fft_row_butterfly_kernel!(backend, (16, 16))
-        kernel(x, m, p, ndrange=(N, M÷2))
-        m *= 2
-        p += 1
+    for i in 1:N
+        fft!(view(x, i, :), backend)
     end
     
     # Transpose
+    y = similar(x)
     transpose_kernel = transpose_kernel!(backend, (16, 16))
     transpose_kernel(y, x, ndrange=(N, M))
     x .= y
     
-    # Bit reversal permutation
-    kernel = bit_reverse_permutation_kernel_2d!(backend, (16, 16))
-    kernel(y, x, ndrange=(M, N))
-    x .= y
-    
     # FFT each "column" (which is now a row)
-    m = 1
-    p = 1
-    while m < N
-        kernel = fft_row_butterfly_kernel!(backend, (16, 16))
-        kernel(x, m, p, ndrange=(M, N÷2))
-        m *= 2
-        p += 1
+    for i in 1:M
+        fft!(view(x, i, :), backend)
     end
     
     # Transpose back
@@ -147,6 +290,10 @@ function fft2!(x)
     x .= y
     
     return x
+end
+
+function fft2!(x)
+    return fft2!(x, KernelAbstractions.get_backend(x))
 end
 
 end
